@@ -6,6 +6,9 @@ import { WeekNav, Modal, Spinner, ErrorBox, niceDate, DAY_NAMES, dayOfWeek, toda
 import { shiftDuration } from '../../../../server/lib/time.js';
 import GettingStarted from './GettingStarted.jsx';
 import RosterChecks from './RosterChecks.jsx';
+import RosterTimeline from './RosterTimeline.jsx';
+
+const addHours = (hhmm, h) => { const m = (Number(hhmm.slice(0, 2)) + h) % 24; return `${String(m).padStart(2, '0')}${hhmm.slice(2)}`; };
 
 export default function Roster() {
   const [sp, setSp] = useSearchParams();
@@ -15,6 +18,8 @@ export default function Roster() {
   const [edit, setEdit] = useState(null);
   const [dragId, setDragId] = useState(null);
   const [over, setOver] = useState(null);
+  const [view, setView] = useState(() => { try { return localStorage.getItem('rp_roster_view') || 'day'; } catch { return 'day'; } });
+  const setViewSaved = (v) => { setView(v); try { localStorage.setItem('rp_roster_view', v); } catch { /* ignore */ } };
 
   if (error) return <ErrorBox error={error} />;
   if (!data) return <Spinner />;
@@ -40,7 +45,7 @@ export default function Roster() {
       <div className="page-head">
         <div>
           <h1>Roster</h1>
-          <p className="muted small">Drafts from Claude appear in <span className="pill amber">amber</span>. Drag a shift to move it, click a cell to add one.</p>
+          <p className="muted small">Drafts from Claude appear in <span className="pill amber">amber</span>. Problems are flagged in red, with fixes below.</p>
         </div>
         <div className="row">
           <WeekNav week={week} onChange={(w) => setSp({ week: w })} />
@@ -54,6 +59,20 @@ export default function Roster() {
         <div className="notice" style={{ marginBottom: '1rem' }}>No staff yet. Ask Claude to add your team, or add them on the <Link to="/owner/staff">Staff</Link> page.</div>
       )}
 
+      <div className="row between" style={{ marginBottom: '.6rem' }}>
+        <div className="tabs" style={{ margin: 0, width: 320 }}>
+          <button className={view === 'day' ? 'on' : ''} onClick={() => setViewSaved('day')}>By day & time</button>
+          <button className={view === 'person' ? 'on' : ''} onClick={() => setViewSaved('person')}>By person</button>
+        </div>
+        {view === 'day' && <span className="tiny muted">Click a bar to edit · click an empty spot to add · drag a bar to another day</span>}
+      </div>
+
+      {view === 'day' ? (
+        <RosterTimeline data={data} today={today} badShift={badShift}
+          onEdit={(s) => setEdit(s)}
+          onAdd={(date, start) => setEdit({ staff_id: data.staff[0]?.id, date, start_time: start, end_time: addHours(start, 8) })}
+          onMove={(sh, date) => move(sh, sh.staff_id, date)} />
+      ) : (
       <div className="roster-wrap">
         <div className="roster">
           <div className="hcell">Staff</div>
@@ -61,6 +80,7 @@ export default function Roster() {
           {data.staff.map((st) => <Fragment key={st.id}>{renderRow(st)}</Fragment>)}
         </div>
       </div>
+      )}
 
       <RosterChecks data={data} week={week} onChanged={reload} />
 

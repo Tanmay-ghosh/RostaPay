@@ -52,7 +52,7 @@ export async function getWeek(bid, week, { publishedOnly = false } = {}) {
   };
   const violations = suggestFixes({ ...ctx, violations: checkRoster(ctx) });
   const logs = await q('SELECT id, shift_id, staff_id, date, actual_start, actual_end, break_minutes, status FROM time_logs WHERE business_id=$1 AND date = ANY($2)', [bid, dates]);
-  return { week_start: start, dates, staff: staff.map(({ pin_hash, ...s }) => s), shifts, violations, logs, draft_count: shifts.filter((s) => s.status === 'draft').length };
+  return { week_start: start, dates, staff: staff.map(({ pin_hash, ...s }) => s), shifts, violations, logs, coverage, draft_count: shifts.filter((s) => s.status === 'draft').length };
 }
 
 async function logsFor(bid, staffId, dates, statuses) {
