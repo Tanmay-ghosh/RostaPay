@@ -23,7 +23,12 @@ function rosterSummary(w, appUrl) {
   return {
     week_start: w.week_start,
     shifts: w.shifts.map((s) => ({ staff: s.staff_name, date: s.date, day: DAY_NAMES[new Date(s.date + 'T00:00:00Z').getUTCDay()], start_time: s.start_time, end_time: s.end_time, role: s.role, status: s.status })),
-    violations: w.violations.map((v) => v.message),
+    violations: w.violations.map((v) => ({
+      problem: v.message,
+      ...(v.why ? { why: v.why } : {}),
+      can_fix_in_roster: !v.infeasible,
+      suggested_fixes: (v.fixes || []).map((f) => f.label),
+    })),
     draft_shifts: w.draft_count,
     next_step: w.draft_count ? `Draft saved. Ask the owner to review it and press "Publish week" at ${appUrl}/owner/roster?week=${w.week_start} (they can drag shifts to fix anything).` : 'All shifts are published.',
   };
@@ -120,7 +125,7 @@ Always fill source_text with the owner's wording. mode "replace" (default) repla
 
   server.registerTool('create_roster', {
     title: 'Create a weekly roster',
-    description: 'Save a roster you drafted for one Mon–Sun week as DRAFT shifts. RostaPay checks it (coverage, availability, days off, max days/hours, overlaps, rest) and returns any violations — fix them and call again if needed. replace_existing (default true) replaces the week\'s existing shifts (shifts with logged hours are kept). The owner then reviews and publishes it in the app.',
+    description: 'Save a roster you drafted for one Mon–Sun week as DRAFT shifts. RostaPay checks it (coverage, availability, days off, max days/hours, overlaps, rest) and returns any violations, each with suggested fixes computed by RostaPay. Fix what can be fixed in the roster (apply the suggestions or redraft) and call again until no fixable violations remain. Violations with can_fix_in_roster=false cannot be solved by any roster (e.g. nobody is available then): do NOT keep retrying — explain them to the owner in plain words with the suggested options (change opening hours/coverage via update_business_settings, ask staff to widen availability, or hire), and let the owner decide. replace_existing (default true) replaces the week\'s existing shifts (shifts with logged hours are kept). The owner then reviews and publishes it in the app.',
     inputSchema: {
       week_start: date.describe('Any date in the week; normalised to Monday'),
       replace_existing: z.boolean().default(true),

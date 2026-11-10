@@ -5,6 +5,7 @@ import { useLoad, useToast } from '../../hooks.js';
 import { WeekNav, Modal, Spinner, ErrorBox, niceDate, DAY_NAMES, dayOfWeek, todayIST, weekStart, fmtHours } from '../../components.jsx';
 import { shiftDuration } from '../../../../server/lib/time.js';
 import GettingStarted from './GettingStarted.jsx';
+import RosterChecks from './RosterChecks.jsx';
 
 export default function Roster() {
   const [sp, setSp] = useSearchParams();
@@ -61,20 +62,7 @@ export default function Roster() {
         </div>
       </div>
 
-      <div className="grid2" style={{ marginTop: '1rem' }}>
-        <div className="card">
-          <div className="row between"><h3>Checks</h3>{data.violations.length ? <span className="pill red">{data.violations.length} issue{data.violations.length > 1 ? 's' : ''}</span> : <span className="pill green">All good</span>}</div>
-          {data.violations.length === 0 ? <p className="small muted">Coverage, availability, days off, max days/hours, overlaps and rest are all within your rules.</p> : (
-            <ul className="violations small">{data.violations.map((v, i) => <li key={i}>{v.message}</li>)}</ul>
-          )}
-        </div>
-        <div className="card">
-          <h3>Let Claude draft it</h3>
-          <p className="small muted">In Claude, try:</p>
-          <div className="code">“Make next week's roster for my café using RostaPay. Keep everyone under 6 days and give Ravi evenings only.”</div>
-          <p className="tiny muted" style={{ marginTop: 8 }}>Not connected yet? See <Link to="/owner/settings">Settings → Connect Claude</Link>.</p>
-        </div>
-      </div>
+      <RosterChecks data={data} week={week} onChanged={reload} />
 
       {edit && <ShiftModal init={edit} staff={data.staff} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); reload(); }} />}
     </div>

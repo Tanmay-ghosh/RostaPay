@@ -30,7 +30,7 @@ export function checkRoster({ weekStart, staff, shifts, availability = [], unava
       let gapStart = null, gapMin = Infinity;
       const flush = (endMin) => {
         if (gapStart == null) return;
-        v.push({ type: 'coverage', date, message: `${label(date)} ${fromMinutes(gapStart)}–${fromMinutes(endMin)}: only ${gapMin} on shift${req.role ? ` (${req.role})` : ''}, needs ${req.min_staff}` });
+        v.push({ type: 'coverage', date, coverage_id: req.id, weekday: Number(req.weekday), gap_start: gapStart, gap_end: endMin, have: gapMin, need: Number(req.min_staff), role: req.role || null, req_start: rs, req_end: rs + len, message: `${label(date)} ${fromMinutes(gapStart)}–${fromMinutes(endMin)}: only ${gapMin} on shift${req.role ? ` (${req.role})` : ''}, needs ${req.min_staff}` });
         gapStart = null; gapMin = Infinity;
       };
       for (let t = 0; t < len; t += 15) {

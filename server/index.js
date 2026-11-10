@@ -130,6 +130,34 @@ owner.post('/roster/publish', h(async (req, res) => {
   res.json({ published: rows.length });
 }));
 
+// Apply one suggested fix from the roster checks (shift edits go back to draft so the owner re-publishes)
+owner.post('/roster/fix', h(async (req, res) => {
+  const f = req.body?.fix || {};
+  const own = async (table, id) => { const r = await one(`SELECT id FROM ${table} WHERE id=$1 AND business_id=$2`, [id, B(req)]); if (!r) throw err(404, 'Not found'); };
+  if (f.type === 'update_shift') {
+    await own('shifts', f.shift_id);
+    const st = await one('SELECT id FROM staff WHERE id=$1 AND business_id=$2', [f.staff_id, B(req)]);
+    if (!st) throw err(400, 'Unknown staff');
+    toMinutes(f.start_time); toMinutes(f.end_time);
+    await q("UPDATE shifts SET staff_id=$2, start_time=$3, end_time=$4, status='draft' WHERE id=$1", [f.shift_id, st.id, f.start_time, f.end_time]);
+  } else if (f.type === 'add_shift') {
+    const st = await one('SELECT id, role FROM staff WHERE id=$1 AND business_id=$2', [f.staff_id, B(req)]);
+    if (!st || !isDate(f.date)) throw err(400, 'Invalid fix');
+    toMinutes(f.start_time); toMinutes(f.end_time);
+    await q("INSERT INTO shifts (business_id, staff_id, date, start_time, end_time, role, status) VALUES ($1,$2,$3,$4,$5,$6,'draft')", [B(req), st.id, f.date, f.start_time, f.end_time, st.role]);
+  } else if (f.type === 'delete_shift') {
+    await own('shifts', f.shift_id);
+    await q('DELETE FROM shifts WHERE id=$1', [f.shift_id]);
+  } else if (f.type === 'coverage') {
+    await own('coverage_requirements', f.coverage_id);
+    if (f.start_time) toMinutes(f.start_time);
+    if (f.end_time) toMinutes(f.end_time);
+    await q('UPDATE coverage_requirements SET start_time=COALESCE($2,start_time), end_time=COALESCE($3,end_time), min_staff=COALESCE($4,min_staff) WHERE id=$1',
+      [f.coverage_id, f.start_time || null, f.end_time || null, f.min_staff ?? null]);
+  } else throw err(400, 'Unknown fix');
+  res.json({ ok: true });
+}));
+
 owner.get('/staff', h(async (req, res) => res.json(await svc.getStaffFull(B(req)))));
 owner.post('/staff', h(async (req, res) => {
   const { name, phone, role, pin, availability, unavailable_dates } = req.body || {};

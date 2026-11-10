@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { q, one, tx } from './db.js';
 import { computePay, describeRule } from './lib/payEngine.js';
 import { checkRoster } from './lib/rosterChecks.js';
+import { suggestFixes } from './lib/rosterFixes.js';
 import { weekStart as mondayOf, weekDates, todayIST, isDate, toMinutes } from './lib/time.js';
 import { validateRuleShape } from './schemas.js';
 
@@ -40,7 +41,7 @@ export async function getWeek(bid, week, { publishedOnly = false } = {}) {
        FROM shifts s JOIN staff st ON st.id = s.staff_id
       WHERE s.business_id=$1 AND s.date = ANY($2) ${publishedOnly ? "AND s.status='published'" : ''}
       ORDER BY s.date, s.start_time`, [bid, dates]);
-  const violations = checkRoster({
+  const ctx = {
     weekStart: start,
     staff,
     shifts,
@@ -48,7 +49,8 @@ export async function getWeek(bid, week, { publishedOnly = false } = {}) {
     unavailable: staff.flatMap((s) => s.unavailable_dates),
     coverage,
     constraints: biz,
-  });
+  };
+  const violations = suggestFixes({ ...ctx, violations: checkRoster(ctx) });
   const logs = await q('SELECT id, shift_id, staff_id, date, actual_start, actual_end, break_minutes, status FROM time_logs WHERE business_id=$1 AND date = ANY($2)', [bid, dates]);
   return { week_start: start, dates, staff: staff.map(({ pin_hash, ...s }) => s), shifts, violations, logs, draft_count: shifts.filter((s) => s.status === 'draft').length };
 }
