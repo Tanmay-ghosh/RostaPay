@@ -166,16 +166,28 @@ function ShiftModal({ init, staff, onClose, onSaved }) {
 }
 
 function HistoryModal({ week, onClose, onRestored }) {
-  const { data, error } = useLoad(`/api/owner/roster/versions?week=${week}`);
+  const { data, error, reload: reloadVersions } = useLoad(`/api/owner/roster/versions?week=${week}`);
   const toast = useToast();
   const [open, setOpen] = useState(null);
+  const [changed, setChanged] = useState(false);
+  const remove = async (v) => {
+    if (!confirm('Delete this saved version? This can’t be undone. Your current roster is not affected.')) return;
+    try { await del(`/api/owner/roster/versions/${v.id}`); toast('Version deleted'); setChanged(true); reloadVersions(); } catch (e) { toast(e.message, true); }
+  };
+  const clearAll = async () => {
+    if (!confirm(`Delete all ${data.length} saved versions of this week? Your current roster is not affected.`)) return;
+    try { await del(`/api/owner/roster/versions?week=${week}`); toast('History cleared'); setChanged(true); reloadVersions(); } catch (e) { toast(e.message, true); }
+  };
   const restore = async (v) => {
     if (!confirm('Restore this version as a draft? The current roster is saved to History first, so you can always come back.')) return;
     try { await post(`/api/owner/roster/versions/${v.id}/restore`); toast('Older version restored as draft — publish when ready'); onRestored(); } catch (e) { toast(e.message, true); }
   };
   return (
-    <Modal title="Roster history" onClose={onClose} wide>
-      <p className="small muted" style={{ marginTop: 0 }}>Every time Claude makes a new roster for this week (or you restore one), RostaPay keeps a copy of the previous version here. Shifts with logged hours are never removed.</p>
+    <Modal title="Roster history" onClose={() => { onClose(); onRestored && changed && onRestored(); }} wide>
+      <div className="row between" style={{ alignItems: 'flex-start', flexWrap: 'nowrap' }}>
+        <p className="small muted" style={{ marginTop: 0 }}>Copies of this week's roster: saved drafts, and the previous version each time Claude makes a new roster or you restore one. Deleting a copy never changes your current roster.</p>
+        {data?.length > 1 && <button className="danger" style={{ flex: 'none' }} onClick={clearAll}>Delete all</button>}
+      </div>
       <ErrorBox error={error} />
       {!data ? <Spinner /> : data.length === 0 ? <p className="muted">No earlier versions of this week yet.</p> : data.map((v) => (
         <div key={v.id} className="fix-item" style={{ borderLeftColor: 'var(--line)' }}>
@@ -187,6 +199,7 @@ function HistoryModal({ week, onClose, onRestored }) {
             <div className="row">
               <button className="ghost small" onClick={() => setOpen(open === v.id ? null : v.id)}>{open === v.id ? 'Hide' : 'View'}</button>
               <button className="secondary" onClick={() => restore(v)}>Restore</button>
+              <button className="ghost" style={{ color: 'var(--red)' }} onClick={() => remove(v)} title="Delete this saved version">Delete</button>
             </div>
           </div>
           {open === v.id && (

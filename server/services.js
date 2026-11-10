@@ -173,6 +173,9 @@ export async function snapshotWeek(t, bid, week, label) {
   const rows = await t.q(`SELECT s.staff_id, st.name AS staff_name, s.date, s.start_time, s.end_time, s.role, s.status, s.notes
       FROM shifts s JOIN staff st ON st.id = s.staff_id WHERE s.business_id=$1 AND s.date = ANY($2) ORDER BY s.date, s.start_time`, [bid, dates]);
   if (!rows.length) return null;
+  const last = await t.one('SELECT id, shifts FROM roster_versions WHERE business_id=$1 AND week_start=$2 ORDER BY created_at DESC LIMIT 1', [bid, normWeek(week)]);
+  const sig = (arr) => arr.map((r) => [r.staff_id, r.date, r.start_time, r.end_time, r.role, r.status, r.notes].join('|')).join('\n');
+  if (last && sig(last.shifts) === sig(rows)) return last; // same as the latest saved copy: don't duplicate
   return t.one('INSERT INTO roster_versions (business_id, week_start, label, shifts) VALUES ($1,$2,$3,$4) RETURNING id', [bid, normWeek(week), label, JSON.stringify(rows)]);
 }
 

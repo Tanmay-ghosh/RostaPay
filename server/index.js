@@ -125,6 +125,14 @@ owner.delete('/shifts/:id', h(async (req, res) => {
   res.json({ ok: true });
 }));
 owner.get('/roster/versions', h(async (req, res) => res.json(await svc.listVersions(B(req), req.query.week))));
+owner.delete('/roster/versions/:id', h(async (req, res) => {
+  await q('DELETE FROM roster_versions WHERE id=$1 AND business_id=$2', [req.params.id, B(req)]);
+  res.json({ ok: true });
+}));
+owner.delete('/roster/versions', h(async (req, res) => {
+  const r = await q('DELETE FROM roster_versions WHERE business_id=$1 AND week_start=$2 RETURNING id', [B(req), svc.normWeek(req.query.week)]);
+  res.json({ deleted: r.length });
+}));
 owner.post('/roster/versions/:id/restore', h(async (req, res) => res.json({ week_start: await svc.restoreVersion(B(req), req.params.id) })));
 owner.post('/roster/save-draft', h(async (req, res) => {
   const week = svc.normWeek(req.body?.week);
