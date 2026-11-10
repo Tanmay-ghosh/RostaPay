@@ -48,8 +48,8 @@ export default function Landing() {
         <nav className="row">
           <a href="#how" className="l-link">How it works</a>
           <a href="#staff" className="l-link">For staff</a>
-          <Link className="btn secondary" to="/staff/login">Staff login</Link>
-          <Link className="btn" to="/owner/login">Owner login</Link>
+          <Link className="btn secondary" to="/staff/login">Staff<span className="hide-sm"> login</span></Link>
+          <Link className="btn" to="/owner/login">Owner<span className="hide-sm"> login</span></Link>
         </nav>
       </header>
 
