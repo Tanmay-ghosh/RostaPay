@@ -23,7 +23,7 @@ export default function MyWeek() {
             <div key={d} className={`card shift-card ${d < today ? 'past' : ''}`} style={{ padding: '.7rem .8rem', ...(d === today ? { borderColor: 'var(--teal)' } : {}) }}>
               <div className="date"><span>{DAY_NAMES[dayOfWeek(d)]}</span><b>{Number(d.slice(8))}</b><span>{MONTHS[Number(d.slice(5, 7)) - 1]}</span></div>
               <div className="grow">
-                {mine.length === 0 ? <div className="muted">{data.week_published === false ? 'Not published yet' : 'Day off'}</div> : mine.map((s) => (
+                {mine.length === 0 ? <div className="muted">Day off</div> : mine.map((s) => (
                   <div key={s.id}>
                     <div style={{ fontSize: '1.15rem', fontWeight: 800 }}>{s.start_time} – {s.end_time}</div>
                     <div className="small muted">{s.role} · {fmtHours(shiftDuration(s.start_time, s.end_time))}
@@ -37,9 +37,7 @@ export default function MyWeek() {
           );
         })}
       </div>
-      {data.week_published === false
-        ? <p className="small muted">Your manager hasn't published this week's roster yet — check back later.</p>
-        : data.my_shifts.length === 0 && <p className="small muted">You have no shifts this week.</p>}
+      {data.my_shifts.length === 0 && <p className="small muted">No published shifts for you this week yet.</p>}
     </div>
   );
 }

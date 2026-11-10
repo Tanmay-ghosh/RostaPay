@@ -7,7 +7,7 @@ import { one } from './db.js';
 import * as svc from './services.js';
 import { computePay } from './lib/payEngine.js';
 import { ruleSchema, time, date, weekday } from './schemas.js';
-import { DAY_NAMES, fmtINR, fmtHours, assertDate, assertShiftTimes } from './lib/time.js';
+import { DAY_NAMES, fmtINR, fmtHours, toMinutes } from './lib/time.js';
 
 const INSTRUCTIONS = `RostaPay runs staff rosters and pay for a small business (café, salon, clinic) in India.
 You (Claude) do the thinking: read the owner's pay policy, staff list and availability, and draft rosters.
@@ -116,10 +116,8 @@ Always fill source_text with the owner's wording. mode "replace" (default) repla
       role: z.string().optional().describe('Role to test with if no staff given'),
     },
   }, safe(async (a) => {
-    assertDate(a.date);
-    assertShiftTimes(a.start_time, a.end_time, a.break_minutes);
+    toMinutes(a.start_time); toMinutes(a.end_time);
     const st = a.staff ? await svc.findStaff(bid, a.staff) : null;
-    if (a.staff && !st) throw new Error(`Unknown staff "${a.staff}" — use a name or phone from get_business_overview, or leave staff out and pass role`);
     const rules = await svc.getRules(bid);
     const r = computePay({ rules, staff: st || { id: 'test', role: a.role || '' }, logs: [{ id: 't', date: a.date, start: a.start_time, end: a.end_time, break_minutes: a.break_minutes }] });
     return text({ worked: fmtHours(r.worked_minutes), breakdown: r.lines.map((l) => `${l.rule_name}: ${l.label} = ${fmtINR(l.amount)}`), total: fmtINR(r.total), warnings: r.warnings, manual_rules_not_included: r.manual_rules.map((m) => m.name) });
@@ -127,17 +125,13 @@ Always fill source_text with the owner's wording. mode "replace" (default) repla
 
   server.registerTool('create_roster', {
     title: 'Create a weekly roster',
-    description: 'Save a roster you drafted for one Mon–Sun week as DRAFT shifts. RostaPay checks it (coverage, availability, days off, max days/hours, overlaps, rest) and returns any violations, each with suggested fixes computed by RostaPay. Fix what can be fixed in the roster (apply the suggestions or redraft) and call again until no fixable violations remain. Violations with can_fix_in_roster=false cannot be solved by any roster (e.g. nobody is available then): do NOT keep retrying — explain them to the owner in plain words with the suggested options (change opening hours/coverage via update_business_settings, ask staff to widen availability, or hire), and let the owner decide. replace_existing (default true) replaces the week\'s existing shifts (shifts with logged hours are kept). The owner then reviews and publishes it in the app.',
+    description: 'Save a roster you drafted for one Mon–Sun week as DRAFT shifts. RostaPay checks it (coverage, availability, days off, max days/hours, overlaps, rest) and returns any violations, each with suggested fixes computed by RostaPay. Fix what can be fixed in the roster (apply the suggestions or redraft) and call again until no fixable violations remain. Violations with can_fix_in_roster=false cannot be solved by any roster (e.g. nobody is available then): do NOT keep retrying — explain them to the owner in plain words with the suggested options (change opening hours/coverage via update_business_settings, ask staff to widen availability, or hire), and let the owner decide. replace_existing (default true) replaces the week\'s existing shifts — RostaPay first saves a copy of the old roster, which the owner can restore from Roster → History (shifts with logged hours are always kept). Use replace_existing=false to only add shifts. To change part of a published roster, prefer get_roster and resend the full week with your changes rather than dropping shifts. The owner then reviews and publishes it in the app.',
     inputSchema: {
       week_start: date.describe('Any date in the week; normalised to Monday'),
       replace_existing: z.boolean().default(true),
-      shifts: z.array(z.object({ staff: z.string().describe('Staff name or phone'), date, start_time: time, end_time: time, role: z.string().optional().describe("Defaults to the person's own role. A different role is flagged and does not count toward that role's coverage."), notes: z.string().optional() })).min(1),
+      shifts: z.array(z.object({ staff: z.string().describe('Staff name or phone'), date, start_time: time, end_time: time, role: z.string().optional(), notes: z.string().optional() })).min(1),
     },
-  }, safe(async (a) => {
-    assertDate(a.week_start);
-    for (const s of a.shifts) assertDate(s.date);
-    return text(rosterSummary(await svc.saveRoster(bid, a.week_start, a.shifts, a.replace_existing), appUrl));
-  }));
+  }, safe(async (a) => text(rosterSummary(await svc.saveRoster(bid, a.week_start, a.shifts, a.replace_existing), appUrl))));
 
   server.registerTool('get_roster', {
     title: 'Get roster',

@@ -21,7 +21,8 @@ export default function Rules() {
     <div>
       <div className="page-head">
         <div><h1>Pay rules</h1><p className="muted small">Your pay policy as exact rules. Claude writes them from your words; RostaPay applies them the same way every week.</p></div>
-        <button onClick={() => setEdit({ name: '', source_text: '', kind: 'rate', priority: 1, conditions: {}, effect: { rate_per_hour: 200 }, enabled: true })}>+ Add rule</button>
+        <div className="row"><button className="secondary" onClick={() => reload()} title="Load rules Claude just changed">↻ Refresh</button>
+        <button onClick={() => setEdit({ name: '', source_text: '', kind: 'rate', priority: 1, conditions: {}, effect: { rate_per_hour: 200 }, enabled: true })}>+ Add rule</button></div>
       </div>
       <div className="grid2" style={{ alignItems: 'start' }}>
         <div>
@@ -49,7 +50,8 @@ export default function Rules() {
 }
 
 function Tester({ version }) {
-  const { data: staff } = useLoad('/api/owner/staff');
+  const { data: staff, reload: reloadStaff } = useLoad('/api/owner/staff');
+  const [tick, setTick] = useState(0);
   const [f, setF] = useState({ staff_id: '', date: todayIST(), start_time: '14:00', end_time: '00:30', break_minutes: 0 });
   const [res, setRes] = useState(null);
   const [error, setError] = useState(null);
@@ -58,11 +60,11 @@ function Tester({ version }) {
     if (!f.date || !f.start_time || !f.end_time) return;
     const t = setTimeout(() => post('/api/owner/rules/test', f).then((r) => { setRes(r); setError(null); }).catch(setError), 250);
     return () => clearTimeout(t);
-  }, [f, version]);
+  }, [f, version, tick]);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   return (
     <div className="card" style={{ position: 'sticky', top: 16, margin: 0 }}>
-      <h3>🧪 Rule tester</h3>
+      <div className="row between"><h3 style={{ margin: 0 }}>🧪 Rule tester</h3><button className="ghost small" onClick={() => { reloadStaff(); setTick((x) => x + 1); }} title="Recalculate with the latest rules">↻ Refresh</button></div>
       <p className="small muted" style={{ marginTop: 0 }}>Try any shift and see exactly how it would be paid.</p>
       <div className="grid2">
         <div className="field"><label>Staff</label><select value={f.staff_id} onChange={set('staff_id')}>{(staff || []).map((s) => <option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}</select></div>

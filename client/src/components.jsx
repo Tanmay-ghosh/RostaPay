@@ -67,7 +67,7 @@ export function Breakdown({ lines = [], adjustments = [], total, compact }) {
 }
 
 // weekly availability editor: value = [{weekday,start_time,end_time}]
-export function AvailabilityEditor({ value, onChange }) {
+export function AvailabilityEditor({ value, onChange, self }) {
   const order = [1, 2, 3, 4, 5, 6, 0];
   const byDay = (d) => value.filter((a) => Number(a.weekday) === d);
   const setDay = (d, on) => {
@@ -88,7 +88,7 @@ export function AvailabilityEditor({ value, onChange }) {
           </div>
         );
       })}
-      <p className="tiny muted">Tick the days they can work. An empty list means “available any time”.</p>
+      <p className="tiny muted">{self ? 'Tick the days you can work and set your hours. If you tick nothing, you’re treated as available any time.' : 'Tick the days they can work. An empty list means “available any time”.'}</p>
     </div>
   );
 }

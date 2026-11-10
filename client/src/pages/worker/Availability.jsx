@@ -15,7 +15,7 @@ export default function Availability() {
     <div>
       <h2>When can I work?</h2>
       <p className="small muted" style={{ marginTop: 0 }}>Your manager (and their Claude) use this to make the roster.</p>
-      <div className="card"><h3>Every week</h3><AvailabilityEditor value={f.availability} onChange={(v) => setF({ ...f, availability: v })} /></div>
+      <div className="card"><h3>Every week</h3><AvailabilityEditor self value={f.availability} onChange={(v) => setF({ ...f, availability: v })} /></div>
       <div className="card"><h3>Days off / leave</h3><UnavailableEditor value={f.unavailable_dates} onChange={(v) => setF({ ...f, unavailable_dates: v })} /></div>
       <button className="big" style={{ marginTop: '1rem' }} onClick={save}>Save</button>
     </div>

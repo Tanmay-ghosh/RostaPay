@@ -4,7 +4,7 @@ import { q, one, tx } from './db.js';
 import { computePay, describeRule } from './lib/payEngine.js';
 import { checkRoster } from './lib/rosterChecks.js';
 import { suggestFixes } from './lib/rosterFixes.js';
-import { weekStart as mondayOf, weekDates, todayIST, isDate, toMinutes, assertShiftTimes } from './lib/time.js';
+import { weekStart as mondayOf, weekDates, todayIST, isDate, toMinutes } from './lib/time.js';
 import { validateRuleShape } from './schemas.js';
 
 export const currentWeek = () => mondayOf(todayIST());
@@ -52,7 +52,8 @@ export async function getWeek(bid, week, { publishedOnly = false } = {}) {
   };
   const violations = suggestFixes({ ...ctx, violations: checkRoster(ctx) });
   const logs = await q('SELECT id, shift_id, staff_id, date, actual_start, actual_end, break_minutes, status FROM time_logs WHERE business_id=$1 AND date = ANY($2)', [bid, dates]);
-  return { week_start: start, dates, staff: staff.map(({ pin_hash, ...s }) => s), shifts, violations, logs, coverage, draft_count: shifts.filter((s) => s.status === 'draft').length };
+  const versions = (await one('SELECT count(*)::int AS n FROM roster_versions WHERE business_id=$1 AND week_start=$2', [bid, start])).n;
+  return { week_start: start, dates, staff: staff.map(({ pin_hash, ...s }) => s), shifts, violations, logs, coverage, versions, draft_count: shifts.filter((s) => s.status === 'draft').length };
 }
 
 async function logsFor(bid, staffId, dates, statuses) {
@@ -113,19 +114,6 @@ export function cleanPhone(p) {
   return d.length >= 10 ? d.slice(-10) : null;
 }
 
-// Indian mobile numbers start with 6, 7, 8 or 9. (The demo café uses reserved 1000000001–05 numbers, so real staff can never collide with it.)
-export function validMobile(p) {
-  const c = cleanPhone(p);
-  return c && /^[6-9]/.test(c) ? c : null;
-}
-
-// The same person may work at two RostaPay businesses with one phone number. Their PINs must differ,
-// otherwise the login cannot tell which business they mean.
-export async function pinClashes(t, phone, pin, businessId) {
-  const others = await t.q('SELECT pin_hash FROM staff WHERE phone=$1 AND business_id<>$2 AND pin_hash IS NOT NULL', [phone, businessId]);
-  return others.some((o) => bcrypt.compareSync(pin, o.pin_hash));
-}
-
 export async function setAvailability(t, staffId, availability, unavailable) {
   if (availability) {
     await t.q('DELETE FROM availability WHERE staff_id=$1', [staffId]);
@@ -147,20 +135,13 @@ export async function upsertStaff(bid, list) {
   return tx(async (t) => {
     const out = [];
     for (const s of list) {
-      if (!cleanPhone(s.phone)) throw new Error(`${s.name}: phone must have 10 digits`);
-      const phone = validMobile(s.phone);
-      if (!phone) throw new Error(`${s.name}: ${cleanPhone(s.phone)} is not a valid Indian mobile number (must start with 6, 7, 8 or 9)`);
+      const phone = cleanPhone(s.phone);
+      if (!phone) throw new Error(`${s.name}: phone must have 10 digits`);
       if (s.pin != null && !/^\d{4}$/.test(String(s.pin))) throw new Error(`${s.name}: PIN must be 4 digits`);
       let row = await t.one('SELECT id, pin_hash FROM staff WHERE business_id=$1 AND phone=$2', [bid, phone]);
       let pin = s.pin != null ? String(s.pin) : null;
-      if (pin && await pinClashes(t, phone, pin, bid)) throw new Error(`${s.name}: this phone number already uses PIN ${pin} at another RostaPay business — choose a different PIN`);
       if (!row) {
-        if (!pin) {
-          for (let i = 0; i < 20; i++) {
-            pin = String(Math.floor(1000 + Math.random() * 9000));
-            if (!(await pinClashes(t, phone, pin, bid))) break;
-          }
-        }
+        if (!pin) pin = String(Math.floor(1000 + Math.random() * 9000));
         row = await t.one('INSERT INTO staff (business_id, name, phone, role, pin_hash) VALUES ($1,$2,$3,$4,$5) RETURNING id', [bid, s.name, phone, s.role || null, bcrypt.hashSync(pin, 8)]);
         out.push({ name: s.name, phone, status: 'added', pin });
       } else {
@@ -186,6 +167,39 @@ export async function saveRules(bid, rules, mode = 'replace') {
   });
 }
 
+// Save a copy of a week's roster before it gets replaced, so nothing is ever lost.
+export async function snapshotWeek(t, bid, week, label) {
+  const dates = weekDates(normWeek(week));
+  const rows = await t.q(`SELECT s.staff_id, st.name AS staff_name, s.date, s.start_time, s.end_time, s.role, s.status, s.notes
+      FROM shifts s JOIN staff st ON st.id = s.staff_id WHERE s.business_id=$1 AND s.date = ANY($2) ORDER BY s.date, s.start_time`, [bid, dates]);
+  if (!rows.length) return null;
+  return t.one('INSERT INTO roster_versions (business_id, week_start, label, shifts) VALUES ($1,$2,$3,$4) RETURNING id', [bid, normWeek(week), label, JSON.stringify(rows)]);
+}
+
+export async function listVersions(bid, week) {
+  const rows = await q(`SELECT id, label, created_at, shifts FROM roster_versions WHERE business_id=$1 AND week_start=$2 ORDER BY created_at DESC LIMIT 30`, [bid, normWeek(week)]);
+  return rows.map((r) => ({ id: r.id, label: r.label, created_at: r.created_at, shift_count: r.shifts.length,
+    published: r.shifts.filter((s) => s.status === 'published').length, people: [...new Set(r.shifts.map((s) => s.staff_name))].length, shifts: r.shifts }));
+}
+
+export async function restoreVersion(bid, versionId) {
+  const v = await one('SELECT * FROM roster_versions WHERE id=$1 AND business_id=$2', [versionId, bid]);
+  if (!v) throw new Error('Version not found');
+  const dates = weekDates(v.week_start);
+  await tx(async (t) => {
+    await snapshotWeek(t, bid, v.week_start, 'Before restoring an older version');
+    await t.q('DELETE FROM shifts WHERE business_id=$1 AND date = ANY($2) AND id NOT IN (SELECT shift_id FROM time_logs WHERE shift_id IS NOT NULL)', [bid, dates]);
+    const kept = await t.q('SELECT staff_id, date, start_time FROM shifts WHERE business_id=$1 AND date = ANY($2)', [bid, dates]);
+    const active = new Set((await t.q('SELECT id FROM staff WHERE business_id=$1 AND active', [bid])).map((r) => r.id));
+    for (const s of v.shifts) {
+      if (!active.has(s.staff_id) || kept.some((k) => k.staff_id === s.staff_id && k.date === s.date && k.start_time === s.start_time)) continue;
+      await t.q("INSERT INTO shifts (business_id, staff_id, date, start_time, end_time, role, notes, status) VALUES ($1,$2,$3,$4,$5,$6,$7,'draft')",
+        [bid, s.staff_id, s.date, s.start_time, s.end_time, s.role, s.notes]);
+    }
+  });
+  return v.week_start;
+}
+
 export async function saveRoster(bid, week, shifts, replace = true) {
   const start = normWeek(week);
   const dates = weekDates(start);
@@ -195,11 +209,12 @@ export async function saveRoster(bid, week, shifts, replace = true) {
     const st = await findStaff(bid, s.staff);
     if (!st) { errors.push(`Unknown staff "${s.staff}"`); continue; }
     if (!dates.includes(s.date)) { errors.push(`${s.date} is outside the week starting ${start}`); continue; }
-    try { assertShiftTimes(s.start_time, s.end_time); } catch (e) { errors.push(`${s.staff} on ${s.date}: ${e.message}`); continue; }
+    try { toMinutes(s.start_time); toMinutes(s.end_time); } catch (e) { errors.push(e.message); continue; }
     resolved.push({ ...s, staff_id: st.id, role: s.role || st.role });
   }
   if (errors.length) throw new Error(errors.join('; '));
   await tx(async (t) => {
+    if (replace) await snapshotWeek(t, bid, start, 'Before Claude made a new roster');
     if (replace) await t.q("DELETE FROM shifts WHERE business_id=$1 AND date = ANY($2) AND id NOT IN (SELECT shift_id FROM time_logs WHERE shift_id IS NOT NULL)", [bid, dates]);
     for (const s of resolved) {
       await t.q('INSERT INTO shifts (business_id, staff_id, date, start_time, end_time, role, notes, status) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',

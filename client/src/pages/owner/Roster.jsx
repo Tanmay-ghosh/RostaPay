@@ -18,6 +18,7 @@ export default function Roster() {
   const [edit, setEdit] = useState(null);
   const [dragId, setDragId] = useState(null);
   const [over, setOver] = useState(null);
+  const [history, setHistory] = useState(false);
   const [view, setView] = useState(() => { try { return localStorage.getItem('rp_roster_view') || 'day'; } catch { return 'day'; } });
   const setViewSaved = (v) => { setView(v); try { localStorage.setItem('rp_roster_view', v); } catch { /* ignore */ } };
 
@@ -49,6 +50,8 @@ export default function Roster() {
         </div>
         <div className="row">
           <WeekNav week={week} onChange={(w) => setSp({ week: w })} />
+          <button className="secondary" onClick={() => { reload(); toast('Roster refreshed'); }} title="Load changes Claude just made">↻ Refresh</button>
+          <button className="secondary" onClick={() => setHistory(true)} title="Earlier versions of this week">History{data.versions ? ` (${data.versions})` : ''}</button>
           <button className="amber" onClick={publish} disabled={!data.draft_count}>Publish week{data.draft_count ? ` (${data.draft_count})` : ''}</button>
         </div>
       </div>
@@ -84,6 +87,7 @@ export default function Roster() {
 
       <RosterChecks data={data} week={week} onChanged={reload} />
 
+      {history && <HistoryModal week={week} onClose={() => setHistory(false)} onRestored={() => { setHistory(false); reload(); }} />}
       {edit && <ShiftModal init={edit} staff={data.staff} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); reload(); }} />}
     </div>
   );
@@ -153,6 +157,41 @@ function ShiftModal({ init, staff, onClose, onSaved }) {
         {init.id ? <button className="danger" onClick={remove}>Delete</button> : <span />}
         <div className="row"><button className="secondary" onClick={onClose}>Cancel</button><button onClick={save}>Save</button></div>
       </div>
+    </Modal>
+  );
+}
+
+function HistoryModal({ week, onClose, onRestored }) {
+  const { data, error } = useLoad(`/api/owner/roster/versions?week=${week}`);
+  const toast = useToast();
+  const [open, setOpen] = useState(null);
+  const restore = async (v) => {
+    if (!confirm('Restore this version as a draft? The current roster is saved to History first, so you can always come back.')) return;
+    try { await post(`/api/owner/roster/versions/${v.id}/restore`); toast('Older version restored as draft — publish when ready'); onRestored(); } catch (e) { toast(e.message, true); }
+  };
+  return (
+    <Modal title="Roster history" onClose={onClose} wide>
+      <p className="small muted" style={{ marginTop: 0 }}>Every time Claude makes a new roster for this week (or you restore one), RostaPay keeps a copy of the previous version here. Shifts with logged hours are never removed.</p>
+      <ErrorBox error={error} />
+      {!data ? <Spinner /> : data.length === 0 ? <p className="muted">No earlier versions of this week yet.</p> : data.map((v) => (
+        <div key={v.id} className="fix-item" style={{ borderLeftColor: 'var(--line)' }}>
+          <div className="row between">
+            <div>
+              <b>{new Date(v.created_at).toLocaleString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })}</b>
+              <div className="tiny muted">{v.label} · {v.shift_count} shifts · {v.people} {v.people === 1 ? "person" : "people"}{v.published ? ` · ${v.published} were published` : ''}</div>
+            </div>
+            <div className="row">
+              <button className="ghost small" onClick={() => setOpen(open === v.id ? null : v.id)}>{open === v.id ? 'Hide' : 'View'}</button>
+              <button className="secondary" onClick={() => restore(v)}>Restore</button>
+            </div>
+          </div>
+          {open === v.id && (
+            <div className="tiny" style={{ marginTop: 6, columns: 2 }}>
+              {v.shifts.map((s, i) => <div key={i}>{niceDate(s.date)} · <b>{s.staff_name}</b> {s.start_time}–{s.end_time}</div>)}
+            </div>
+          )}
+        </div>
+      ))}
     </Modal>
   );
 }

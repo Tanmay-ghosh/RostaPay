@@ -4,11 +4,11 @@ import { one, q, tx } from './db.js';
 import { addDays, todayIST, weekStart, weekDates } from './lib/time.js';
 
 const STAFF = [
-  { key: 'R', name: 'Ravi', phone: '1000000001', role: 'barista' },
-  { key: 'P', name: 'Priya', phone: '1000000002', role: 'barista' },
-  { key: 'A', name: 'Arjun', phone: '1000000003', role: 'cook' },
-  { key: 'M', name: 'Meena', phone: '1000000004', role: 'cashier' },
-  { key: 'S', name: 'Salim', phone: '1000000005', role: 'cook' },
+  { key: 'R', name: 'Ravi', phone: '9000000001', role: 'barista' },
+  { key: 'P', name: 'Priya', phone: '9000000002', role: 'barista' },
+  { key: 'A', name: 'Arjun', phone: '9000000003', role: 'cook' },
+  { key: 'M', name: 'Meena', phone: '9000000004', role: 'cashier' },
+  { key: 'S', name: 'Salim', phone: '9000000005', role: 'cook' },
 ];
 
 // Mon..Sun → list of [staffKey, start, end]
@@ -30,16 +30,9 @@ const VARIATIONS = {
   '0|0|R': ['15:00', '23:30', 0],
 };
 
-// Demo staff use reserved numbers 1000000001–05 (not valid Indian mobiles), so a real business can never
-// add the same phone and have its staff land in the demo café by typing the public demo PIN.
-async function moveDemoPhones() {
-  await q(`UPDATE staff SET phone = '1' || substr(phone, 2)
-            WHERE phone LIKE '900000000_' AND business_id IN (SELECT business_id FROM owners WHERE email='demo@rostapay.app')`);
-}
-
 export async function seedIfEmpty() {
   const existing = await one("SELECT 1 FROM owners WHERE email='demo@rostapay.app'");
-  if (existing) { await moveDemoPhones(); return false; }
+  if (existing) return false;
   const today = todayIST();
   const thisWeek = weekStart(today);
   const lastWeek = addDays(thisWeek, -7);

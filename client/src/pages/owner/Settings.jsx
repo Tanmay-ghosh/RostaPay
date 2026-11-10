@@ -32,8 +32,16 @@ export default function Settings() {
         <div className="row"><div className="code grow">{data.mcp_url}</div><button className="secondary" onClick={() => copy(data.mcp_url)}>Copy</button></div>
         <ol className="small" start={3} style={{ lineHeight: 1.7 }}>
           <li>Click <b>Add</b>. No login needed — this link is your business's private key, so don't share it.</li>
-          <li>In a new chat, turn on RostaPay from the tools menu and try one of these:</li>
+          <li>In a new chat, turn on RostaPay from the tools menu and send this first message to check the connection:</li>
         </ol>
+        <div className="row" style={{ alignItems: 'flex-start', flexWrap: 'nowrap' }}><div className="code grow" style={{ borderColor: '#9fd3cb', background: '#f2faf8' }}>“Check that you’re connected to RostaPay: show my business overview and tell me what’s already set up and what’s still missing.”</div><button onClick={() => copy('Check that you’re connected to RostaPay: show my business overview and tell me what’s already set up and what’s still missing.')}>Copy</button></div>
+        <div className="row" style={{ margin: '.6rem 0' }}>
+          {data.mcp_last_used_at
+            ? <span className="pill green">✓ Connected — Claude last used RostaPay {new Date(data.mcp_last_used_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+            : <span className="pill grey">Not connected yet — send the message above in Claude</span>}
+          <button className="ghost small" onClick={() => { reload(); toast('Checked connection'); }}>↻ Refresh</button>
+        </div>
+        <p className="small" style={{ margin: '.8rem 0 .4rem' }}><b>Then try:</b></p>
         <div className="stack">
           {[
             'Here is my café pay policy: ₹200/hr, ₹300/hr after 8 hours a day, ₹100 extra for shifts past 10pm, double pay on Diwali. Set it up in RostaPay and test a 10-hour shift.',

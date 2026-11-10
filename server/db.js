@@ -81,6 +81,13 @@ export async function migrate() {
     notes text, created_at timestamptz NOT NULL DEFAULT now()
   );
   CREATE INDEX IF NOT EXISTS shifts_biz_date ON shifts(business_id, date);
+  CREATE TABLE IF NOT EXISTS roster_versions (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    business_id uuid NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
+    week_start text NOT NULL, label text NOT NULL, shifts jsonb NOT NULL,
+    created_at timestamptz NOT NULL DEFAULT now()
+  );
+  CREATE INDEX IF NOT EXISTS roster_versions_week ON roster_versions(business_id, week_start, created_at DESC);
   CREATE TABLE IF NOT EXISTS time_logs (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     business_id uuid NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,

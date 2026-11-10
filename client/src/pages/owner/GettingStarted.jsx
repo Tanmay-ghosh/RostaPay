@@ -12,15 +12,17 @@ export default function GettingStarted({ version }) {
   const [s, setS] = useState(null);
   const [hidden, setHidden] = useState(() => { try { return localStorage.getItem(key) === '1'; } catch { return false; } });
   const [open, setOpen] = useState(null);
-  useEffect(() => { get('/api/owner/onboarding').then(setS).catch(() => {}); }, [version]);
+  const [tick, setTick] = useState(0);
+  useEffect(() => { get('/api/owner/onboarding').then(setS).catch(() => {}); }, [version, tick]);
   if (!s) return null;
 
   const steps = [
     {
       title: 'Connect your Claude',
-      why: 'Claude does the thinking — reading your policy and drafting rosters. Connect it once.',
+      why: 'Claude does the thinking — reading your policy and drafting rosters. Add your RostaPay link in Claude (Settings → Connectors), then send this message to check it works. Press ↻ Refresh here after.',
       done: s.claude,
       doneText: 'Claude has used RostaPay',
+      prompt: 'Check that you’re connected to RostaPay: show my business overview and tell me what’s already set up and what’s still missing.',
       action: <Link className="btn secondary" to="/owner/settings">Get your Claude link →</Link>,
     },
     {
@@ -71,6 +73,7 @@ export default function GettingStarted({ version }) {
         </div>
         <div className="row">
           <span className="pill">{doneCount} of {steps.length} done</span>
+          <button className="ghost small" title="Re-check what's done" onClick={() => { setTick((x) => x + 1); toast('Checklist refreshed'); }}>↻ Refresh</button>
           <button className="ghost small" onClick={() => { try { localStorage.setItem(key, '1'); } catch { /* ignore */ } setHidden(true); }}>Hide</button>
         </div>
       </div>
