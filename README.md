@@ -18,7 +18,7 @@ The owner can restore the demo data at any time from **Settings → Reset demo d
 
 ## Connect Claude (MCP)
 
-1. Log in as the owner and open **Settings & Claude**. Copy your private MCP link, which looks like `https://<your-app>.onrender.com/mcp/<key>`.
+1. Log in as the owner and open **Settings**. Copy your private MCP link, which looks like `https://<your-app>.onrender.com/mcp/<key>`.
 2. In Claude, go to **Settings → Connectors → Add custom connector**. Name it *RostaPay*, paste the link and click **Add**. No sign-in is needed, because the link itself is the key.
 3. In a chat, turn RostaPay on from the tools menu and try:
    - *"Here's my pay policy: ₹200/hr, ₹300/hr after 8 hours a day, ₹100 extra if a shift runs past 10pm, double pay on Diwali. Set it up in RostaPay and test a 10-hour shift."*

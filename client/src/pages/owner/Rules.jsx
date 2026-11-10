@@ -14,6 +14,7 @@ export default function Rules() {
   const { data, error, reload } = useLoad('/api/owner/rules');
   const toast = useToast();
   const [edit, setEdit] = useState(null);
+  const [refresh, setRefresh] = useState(0);
   if (error) return <ErrorBox error={error} />;
   if (!data) return <Spinner />;
   const toggle = async (r) => { await patch(`/api/owner/rules/${r.id}/enabled`, { enabled: !r.enabled }); toast(r.enabled ? `"${r.name}" turned off` : `"${r.name}" turned on`); reload(); };
@@ -21,7 +22,7 @@ export default function Rules() {
     <div>
       <div className="page-head">
         <div><h1>Pay rules</h1><p className="muted small">Your pay policy as exact rules. Claude writes them from your words; RostaPay applies them the same way every week.</p></div>
-        <div className="row"><button className="secondary" onClick={() => reload()} title="Load rules Claude just changed">↻ Refresh</button>
+        <div className="row"><button className="secondary" onClick={() => { reload(); setRefresh((x) => x + 1); toast('Rules and tester refreshed'); }} title="Load rules Claude just changed and recalculate the tester">↻ Refresh</button>
         <button onClick={() => setEdit({ name: '', source_text: '', kind: 'rate', priority: 1, conditions: {}, effect: { rate_per_hour: 200 }, enabled: true })}>+ Add rule</button></div>
       </div>
       <div className="grid2" style={{ alignItems: 'start' }}>
@@ -42,16 +43,16 @@ export default function Rules() {
             </div>
           ))}
         </div>
-        <Tester version={data.map((r) => r.id + r.enabled).join()} />
+        <Tester version={data.map((r) => r.id + r.enabled + JSON.stringify(r.effect) + JSON.stringify(r.conditions)).join()} refresh={refresh} />
       </div>
       {edit && <RuleModal init={edit} onClose={() => setEdit(null)} onSaved={() => { setEdit(null); reload(); }} />}
     </div>
   );
 }
 
-function Tester({ version }) {
+function Tester({ version, refresh }) {
   const { data: staff, reload: reloadStaff } = useLoad('/api/owner/staff');
-  const [tick, setTick] = useState(0);
+  useEffect(() => { if (refresh) reloadStaff(); }, [refresh]);
   const [f, setF] = useState({ staff_id: '', date: todayIST(), start_time: '14:00', end_time: '00:30', break_minutes: 0 });
   const [res, setRes] = useState(null);
   const [error, setError] = useState(null);
@@ -60,11 +61,11 @@ function Tester({ version }) {
     if (!f.date || !f.start_time || !f.end_time) return;
     const t = setTimeout(() => post('/api/owner/rules/test', f).then((r) => { setRes(r); setError(null); }).catch(setError), 250);
     return () => clearTimeout(t);
-  }, [f, version, tick]);
+  }, [f, version, refresh]);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   return (
     <div className="card" style={{ position: 'sticky', top: 16, margin: 0 }}>
-      <div className="row between"><h3 style={{ margin: 0 }}>🧪 Rule tester</h3><button className="ghost small" onClick={() => { reloadStaff(); setTick((x) => x + 1); }} title="Recalculate with the latest rules">↻ Refresh</button></div>
+      <h3>🧪 Rule tester</h3>
       <p className="small muted" style={{ marginTop: 0 }}>Try any shift and see exactly how it would be paid.</p>
       <div className="grid2">
         <div className="field"><label>Staff</label><select value={f.staff_id} onChange={set('staff_id')}>{(staff || []).map((s) => <option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}</select></div>

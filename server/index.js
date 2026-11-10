@@ -126,6 +126,11 @@ owner.delete('/shifts/:id', h(async (req, res) => {
 }));
 owner.get('/roster/versions', h(async (req, res) => res.json(await svc.listVersions(B(req), req.query.week))));
 owner.post('/roster/versions/:id/restore', h(async (req, res) => res.json({ week_start: await svc.restoreVersion(B(req), req.params.id) })));
+owner.post('/roster/save-draft', h(async (req, res) => {
+  const week = svc.normWeek(req.body?.week);
+  const v = await tx((t) => svc.snapshotWeek(t, B(req), week, 'Saved draft'));
+  res.json({ saved: !!v });
+}));
 owner.post('/roster/publish', h(async (req, res) => {
   const dates = weekDates(svc.normWeek(req.body?.week));
   const rows = await q("UPDATE shifts SET status='published' WHERE business_id=$1 AND date = ANY($2) AND status='draft' RETURNING id", [B(req), dates]);

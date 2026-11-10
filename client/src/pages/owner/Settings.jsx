@@ -20,7 +20,7 @@ export default function Settings() {
 
   return (
     <div>
-      <div className="page-head"><div><h1>Settings & Claude</h1></div></div>
+      <div className="page-head"><div><h1>Settings</h1></div></div>
 
       <div className="card" style={{ borderColor: '#9fd3cb' }}>
         <h2>🔌 Connect your Claude</h2>

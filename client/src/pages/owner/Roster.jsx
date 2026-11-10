@@ -37,6 +37,9 @@ export default function Roster() {
       reload();
     } catch (e) { toast(e.message, true); }
   };
+  const saveDraft = async () => {
+    try { await post('/api/owner/roster/save-draft', { week }); toast('Draft saved — staff can’t see changes until you publish'); reload(); } catch (e) { toast(e.message, true); }
+  };
   const publish = async () => {
     try { const r = await post('/api/owner/roster/publish', { week }); toast(`Published ${r.published} shifts — your team can see them now`); reload(); } catch (e) { toast(e.message, true); }
   };
@@ -52,7 +55,8 @@ export default function Roster() {
           <WeekNav week={week} onChange={(w) => setSp({ week: w })} />
           <button className="secondary" onClick={() => { reload(); toast('Roster refreshed'); }} title="Load changes Claude just made">↻ Refresh</button>
           <button className="secondary" onClick={() => setHistory(true)} title="Earlier versions of this week">History{data.versions ? ` (${data.versions})` : ''}</button>
-          <button className="amber" onClick={publish} disabled={!data.draft_count}>Publish week{data.draft_count ? ` (${data.draft_count})` : ''}</button>
+          <button className="secondary" onClick={saveDraft} disabled={!data.shifts.length} title="Keep your changes without showing them to staff yet">Save as draft</button>
+          <button className="amber" onClick={publish} disabled={!data.draft_count} title={data.draft_count ? 'Show this week to your staff' : 'Everything is already published'}>Publish</button>
         </div>
       </div>
 

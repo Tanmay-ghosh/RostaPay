@@ -39,7 +39,7 @@ function OwnerLayout() {
           <NavLink to="/owner/rules">Pay rules</NavLink>
           <NavLink to="/owner/staff">Staff</NavLink>
           <NavLink to="/owner/swaps">Swaps {badge(me.counts.pending_swaps)}</NavLink>
-          <NavLink to="/owner/settings">Settings & Claude</NavLink>
+          <NavLink to="/owner/settings">Settings</NavLink>
         </nav>
         <div className="grow" />
         <div className="sidebar-foot small">
