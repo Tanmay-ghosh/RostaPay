@@ -88,7 +88,6 @@ export function AvailabilityEditor({ value, onChange, self }) {
           </div>
         );
       })}
-      <p className="tiny muted">{self ? 'Tick the days you can work and set your hours. If you tick nothing, you’re treated as available any time.' : 'Tick the days they can work. An empty list means “available any time”.'}</p>
     </div>
   );
 }
@@ -110,6 +109,29 @@ export function UnavailableEditor({ value, onChange }) {
         <input type="date" value={d} onChange={(e) => setD(e.target.value)} style={{ maxWidth: 170 }} />
         <input placeholder="Reason (optional)" value={r} onChange={(e) => setR(e.target.value)} className="grow" style={{ width: 'auto' }} />
         <button className="secondary" disabled={!d} onClick={() => { onChange([...value, { date: d, reason: r }]); setD(''); setR(''); }}>Add</button>
+      </div>
+    </div>
+  );
+}
+
+// main role + "can also do" skills, lower-cased
+export const skillsOf = (st) => [...new Set([st?.role, ...((st && Array.isArray(st.skills)) ? st.skills : [])].filter(Boolean).map((x) => String(x).trim().toLowerCase()))];
+
+export function SkillsEditor({ value, onChange, mainRole }) {
+  const [txt, setTxt] = useState('');
+  const add = () => {
+    const v = txt.trim().toLowerCase();
+    if (v && !value.includes(v) && v !== String(mainRole || '').toLowerCase()) onChange([...value, v]);
+    setTxt('');
+  };
+  return (
+    <div>
+      <div className="row" style={{ gap: '.35rem', marginBottom: value.length ? 6 : 0 }}>
+        {value.map((s) => <span key={s} className="pill">{s} <button type="button" className="ghost" style={{ padding: 0, fontSize: '.75rem' }} onClick={() => onChange(value.filter((x) => x !== s))} aria-label={`Remove ${s}`}>✕</button></span>)}
+      </div>
+      <div className="row" style={{ flexWrap: 'nowrap' }}>
+        <input value={txt} onChange={(e) => setTxt(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } }} placeholder="e.g. helper, cashier" />
+        <button type="button" className="secondary" onClick={add} disabled={!txt.trim()}>Add</button>
       </div>
     </div>
   );

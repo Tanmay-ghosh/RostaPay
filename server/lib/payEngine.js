@@ -100,7 +100,7 @@ function addLine(map, rule, type, rate, minutes, amount) {
 
 /**
  * Compute pay for one staff member for a set of worked shifts (usually one week, Mon–Sun).
- * logs: [{ id, date, start, end, break_minutes }]  start/end "HH:MM", end <= start means next day.
+ * logs: [{ id, date, start, end, break_minutes, role }]  role = the job done on that shift (defaults to staff.role)  start/end "HH:MM", end <= start means next day.
  * staff: { id, role }
  */
 export function computePay({ rules: rawRules, staff, logs }) {
@@ -123,7 +123,7 @@ export function computePay({ rules: rawRules, staff, logs }) {
       hours: worked / 60,
       day_of_week: dayOfWeek(log.date),
       date: log.date,
-      role: staff.role,
+      role: log.role || staff.role,
       staff_id: staff.id,
       shift_start_hour: Math.floor(s / 60),
       weekly_hours_so_far: weekly / 60,
@@ -209,7 +209,7 @@ export function computePay({ rules: rawRules, staff, logs }) {
 
     const lines = finishLines(shiftLines);
     const total = Math.round(lines.reduce((t, l) => t + l.amount, 0) * 100) / 100;
-    shifts.push({ log_id: log.id, date: log.date, start: log.start, end: log.end, break_minutes: Number(log.break_minutes) || 0, worked_minutes: worked, lines, total });
+    shifts.push({ log_id: log.id, role: ctx.role || null, date: log.date, start: log.start, end: log.end, break_minutes: Number(log.break_minutes) || 0, worked_minutes: worked, lines, total });
     for (const l of shiftLines.values()) {
       const key = `${l.rule_id ?? 'none'}|${l.type}|${l.rate}`;
       const cur = weekLines.get(key) || { ...l, minutes: 0, amount: 0, count: 0 };
@@ -237,7 +237,7 @@ export function describeRule(raw) {
   if (c.dates?.length) when.push(`on ${c.dates.join(', ')}`);
   if (c.daily_hours_over != null) when.push(`for hours beyond ${c.daily_hours_over}h in a day`);
   if (c.weekly_hours_over != null) when.push(`for hours beyond ${c.weekly_hours_over}h in a week`);
-  if (c.roles?.length) when.push(`for ${c.roles.join('/')}`);
+  if (c.roles?.length) when.push(`for ${c.roles.join('/')} shifts`);
   if (c.staff_ids?.length) when.push(`for ${c.staff_ids.length} specific staff`);
   if (c.min_shift_hours != null) when.push(`on shifts of ${c.min_shift_hours}h+`);
   if (c.expression != null) when.push(`when custom formula is true`);

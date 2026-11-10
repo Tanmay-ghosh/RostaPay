@@ -70,7 +70,6 @@ export function WorkerLogin() {
       <div className="card">
         <Link to="/"><Logo /></Link>
         <h2 style={{ marginTop: '1rem' }}>Staff login</h2>
-        <p className="small muted">Use the phone number your manager added and your 4-digit PIN.</p>
         <form onSubmit={submit}>
           <div className="field"><label>Phone number</label><input inputMode="tel" required value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="98xxxxxxxx" style={{ fontSize: '1.1rem' }} /></div>
           <div className="field"><label>PIN</label><input inputMode="numeric" type="password" maxLength={4} required value={pin} onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))} placeholder="••••" style={{ fontSize: '1.4rem', letterSpacing: '.5em' }} /></div>

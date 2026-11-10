@@ -24,22 +24,21 @@ export default function Settings() {
 
       <div className="card" style={{ borderColor: '#9fd3cb' }}>
         <h2>🔌 Connect your Claude</h2>
-        <p className="small">RostaPay has no AI inside. Your own Claude (Pro, Max, Team or Enterprise) does the thinking and sends the results here. Connect it once:</p>
         <ol className="small" style={{ lineHeight: 1.7 }}>
           <li>In Claude, open <b>Settings → Connectors</b> and click <b>Add custom connector</b>.</li>
           <li>Name it <b>RostaPay</b> and paste this URL:</li>
         </ol>
         <div className="row"><div className="code grow">{data.mcp_url}</div><button className="secondary" onClick={() => copy(data.mcp_url)}>Copy</button></div>
         <ol className="small" start={3} style={{ lineHeight: 1.7 }}>
-          <li>Click <b>Add</b>. No login needed — this link is your business's private key, so don't share it.</li>
-          <li>In a new chat, turn on RostaPay from the tools menu and send this first message to check the connection:</li>
+          <li>Click <b>Add</b>. Keep this link private.</li>
+          <li>Turn on RostaPay in a new chat and send:</li>
         </ol>
         <div className="row" style={{ alignItems: 'flex-start', flexWrap: 'nowrap' }}><div className="code grow" style={{ borderColor: '#9fd3cb', background: '#f2faf8' }}>“Check that you’re connected to RostaPay: show my business overview and tell me what’s already set up and what’s still missing.”</div><button onClick={() => copy('Check that you’re connected to RostaPay: show my business overview and tell me what’s already set up and what’s still missing.')}>Copy</button></div>
         <div className="row" style={{ margin: '.6rem 0' }}>
           {data.mcp_last_used_at
-            ? <span className="pill green">✓ Connected — Claude last used RostaPay {new Date(data.mcp_last_used_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</span>
-            : <span className="pill grey">Not connected yet — send the message above in Claude</span>}
-          <button className="ghost small" onClick={() => { reload(); toast('Checked connection'); }}>↻ Refresh</button>
+            ? <span className="pill green">✓ Connected · last used {new Date(data.mcp_last_used_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+            : <span className="pill grey">Not connected</span>}
+          <button className="ghost small" onClick={() => { reload(); toast('Refreshed'); }}>↻ Refresh</button>
         </div>
         <p className="small" style={{ margin: '.8rem 0 .4rem' }}><b>Then try:</b></p>
         <div className="stack">
@@ -66,7 +65,7 @@ export default function Settings() {
           </div>
         </div>
         <h3>Staff needed on shift</h3>
-        {f.coverage.length === 0 && <p className="small muted">No coverage rules — RostaPay won't check for gaps.</p>}
+        {f.coverage.length === 0 && <p className="small muted">None</p>}
         {f.coverage.map((c, i) => (
           <div className="row" key={i} style={{ marginBottom: 6, flexWrap: 'nowrap' }}>
             <select value={c.weekday} onChange={(e) => setCov(i, 'weekday', Number(e.target.value))} style={{ width: 90 }}>{[1, 2, 3, 4, 5, 6, 0].map((d) => <option key={d} value={d}>{DAY_NAMES[d]}</option>)}</select>
@@ -87,7 +86,7 @@ export default function Settings() {
       {me.is_demo && (
         <div className="card">
           <h3>Demo data</h3>
-          <p className="small muted">Reset Brew & Bites Café back to its starting state (staff, rules, this week's roster and logged hours).</p>
+          <p className="small muted">Restore Brew & Bites Café to its original data.</p>
           <button className="danger" onClick={async () => { if (confirm('Reset all demo data?')) { await post('/api/owner/reset-demo'); toast('Demo reset'); nav('/owner/roster'); refreshMe(); } }}>Reset demo data</button>
         </div>
       )}

@@ -2,7 +2,7 @@ import { Fragment, useState } from 'react';
 import { useSearchParams, Link } from 'react-router-dom';
 import { post, put, del } from '../../api.js';
 import { useLoad, useToast } from '../../hooks.js';
-import { WeekNav, Modal, Spinner, ErrorBox, niceDate, DAY_NAMES, dayOfWeek, todayIST, weekStart, fmtHours } from '../../components.jsx';
+import { WeekNav, Modal, Spinner, ErrorBox, niceDate, DAY_NAMES, dayOfWeek, todayIST, weekStart, fmtHours, skillsOf } from '../../components.jsx';
 import { shiftDuration } from '../../../../server/lib/time.js';
 import GettingStarted from './GettingStarted.jsx';
 import RosterChecks from './RosterChecks.jsx';
@@ -32,16 +32,16 @@ export default function Roster() {
   const move = async (shift, staff_id, date) => {
     if (shift.staff_id === staff_id && shift.date === date) return;
     try {
-      await put(`/api/owner/shifts/${shift.id}`, { staff_id, date, start_time: shift.start_time, end_time: shift.end_time, role: null, notes: shift.notes });
+      await put(`/api/owner/shifts/${shift.id}`, { staff_id, date, start_time: shift.start_time, end_time: shift.end_time, role: shift.staff_id === staff_id ? shift.role : null, notes: shift.notes });
       toast(`Moved to ${data.staff.find((s) => s.id === staff_id)?.name}, ${niceDate(date)}`);
       reload();
     } catch (e) { toast(e.message, true); }
   };
   const saveDraft = async () => {
-    try { await post('/api/owner/roster/save-draft', { week }); toast('Draft saved — staff can’t see changes until you publish'); reload(); } catch (e) { toast(e.message, true); }
+    try { await post('/api/owner/roster/save-draft', { week }); toast('Draft saved'); reload(); } catch (e) { toast(e.message, true); }
   };
   const publish = async () => {
-    try { const r = await post('/api/owner/roster/publish', { week }); toast(`Published ${r.published} shifts — your team can see them now`); reload(); } catch (e) { toast(e.message, true); }
+    try { const r = await post('/api/owner/roster/publish', { week }); toast('Published'); reload(); } catch (e) { toast(e.message, true); }
   };
 
   return (
@@ -49,14 +49,13 @@ export default function Roster() {
       <div className="page-head">
         <div>
           <h1>Roster</h1>
-          <p className="muted small">Drafts from Claude appear in <span className="pill amber">amber</span>. Problems are flagged in red, with fixes below.</p>
         </div>
         <div className="row">
           <WeekNav week={week} onChange={(w) => setSp({ week: w })} />
-          <button className="secondary" onClick={() => { reload(); toast('Roster refreshed'); }} title="Load changes Claude just made">↻ Refresh</button>
-          <button className="secondary" onClick={() => setHistory(true)} title="Earlier versions of this week">History{data.versions ? ` (${data.versions})` : ''}</button>
-          <button className="secondary" onClick={saveDraft} disabled={!data.shifts.length} title="Keep your changes without showing them to staff yet">Save as draft</button>
-          <button className="amber" onClick={publish} disabled={!data.draft_count} title={data.draft_count ? 'Show this week to your staff' : 'Everything is already published'}>Publish</button>
+          <button className="secondary" onClick={() => { reload(); toast('Roster refreshed'); }}>↻ Refresh</button>
+          <button className="secondary" onClick={() => setHistory(true)}>History{data.versions ? ` (${data.versions})` : ''}</button>
+          <button className="secondary" onClick={saveDraft} disabled={!data.shifts.length}>Save as draft</button>
+          <button className="amber" onClick={publish} disabled={!data.draft_count} >Publish</button>
         </div>
       </div>
 
@@ -71,7 +70,6 @@ export default function Roster() {
           <button className={view === 'day' ? 'on' : ''} onClick={() => setViewSaved('day')}>By day & time</button>
           <button className={view === 'person' ? 'on' : ''} onClick={() => setViewSaved('person')}>By person</button>
         </div>
-        {view === 'day' && <span className="tiny muted">Click a bar to edit · click an empty spot to add · drag a bar to another day</span>}
       </div>
 
       {view === 'day' ? (
@@ -99,7 +97,7 @@ export default function Roster() {
   function renderRow(st) {
     return (
       <>
-        <div className="name"><b>{st.name}</b><span className="tiny muted">{st.role} · {fmtHours(hours(st.id))}</span></div>
+        <div className="name"><b>{st.name}</b><span className="tiny muted">{st.role}{(st.skills || []).length ? ` +${st.skills.length}` : ''} · {fmtHours(hours(st.id))}</span></div>
         {data.dates.map((d) => {
           const shifts = data.shifts.filter((s) => s.staff_id === st.id && s.date === d);
           const key = `${st.id}|${d}`;
@@ -137,7 +135,7 @@ function ShiftModal({ init, staff, onClose, onSaved }) {
   const save = async () => {
     try {
       if (init.id) await put(`/api/owner/shifts/${init.id}`, f); else await post('/api/owner/shifts', f);
-      toast(init.id ? 'Shift updated (saved as draft — publish when ready)' : 'Shift added as draft');
+      toast(init.id ? 'Shift updated' : 'Shift added');
       onSaved();
     } catch (e) { setError(e); }
   };
@@ -148,11 +146,26 @@ function ShiftModal({ init, staff, onClose, onSaved }) {
   return (
     <Modal title={init.id ? 'Edit shift' : 'Add shift'} onClose={onClose}>
       <div className="grid2">
-        <div className="field"><label>Staff</label><select value={f.staff_id} onChange={set('staff_id')}>{staff.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}</select></div>
+        <div className="field"><label>Staff</label><select value={f.staff_id} onChange={(e) => setF({ ...f, staff_id: e.target.value, role: '' })}>{staff.map((s) => <option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}</select></div>
         <div className="field"><label>Date</label><input type="date" value={f.date} onChange={set('date')} /></div>
         <div className="field"><label>Start</label><input type="time" value={f.start_time} onChange={set('start_time')} /></div>
         <div className="field"><label>End <span className="tiny">(earlier than start = next day)</span></label><input type="time" value={f.end_time} onChange={set('end_time')} /></div>
-        <div className="field"><label>Role for this shift</label><input value={f.role} onChange={set('role')} placeholder="Default: their role" /></div>
+        <div className="field"><label>Job on this shift</label>
+          {(() => {
+            const person = staff.find((s) => s.id === f.staff_id);
+            const skills = skillsOf(person);
+            const cur = (f.role || person?.role || '').toLowerCase();
+            const other = cur && !skills.includes(cur);
+            return (<>
+              <select value={other ? '__other' : cur} onChange={(e) => setF({ ...f, role: e.target.value === '__other' ? ' ' : e.target.value })}>
+                {skills.map((r) => <option key={r} value={r}>{r}{r === String(person?.role || '').toLowerCase() ? ' (main role)' : ''}</option>)}
+                <option value="__other">Other job…</option>
+              </select>
+              {other && <input style={{ marginTop: 6 }} value={f.role.trim()} onChange={set('role')} placeholder="e.g. cook" autoFocus />}
+              {other && f.role.trim() && <div className="tiny" style={{ color: '#92400e', marginTop: 4 }}>Not in {person?.name}'s skills</div>}
+            </>);
+          })()}
+        </div>
         <div className="field"><label>Notes</label><input value={f.notes} onChange={set('notes')} /></div>
       </div>
       <p className="tiny muted">{DAY_NAMES[dayOfWeek(f.date)]} · {fmtHours(shiftDuration(f.start_time || '00:00', f.end_time || '00:00'))}</p>
@@ -171,21 +184,20 @@ function HistoryModal({ week, onClose, onRestored }) {
   const [open, setOpen] = useState(null);
   const [changed, setChanged] = useState(false);
   const remove = async (v) => {
-    if (!confirm('Delete this saved version? This can’t be undone. Your current roster is not affected.')) return;
+    if (!confirm('Delete this version?')) return;
     try { await del(`/api/owner/roster/versions/${v.id}`); toast('Version deleted'); setChanged(true); reloadVersions(); } catch (e) { toast(e.message, true); }
   };
   const clearAll = async () => {
-    if (!confirm(`Delete all ${data.length} saved versions of this week? Your current roster is not affected.`)) return;
+    if (!confirm(`Delete all ${data.length} versions?`)) return;
     try { await del(`/api/owner/roster/versions?week=${week}`); toast('History cleared'); setChanged(true); reloadVersions(); } catch (e) { toast(e.message, true); }
   };
   const restore = async (v) => {
-    if (!confirm('Restore this version as a draft? The current roster is saved to History first, so you can always come back.')) return;
-    try { await post(`/api/owner/roster/versions/${v.id}/restore`); toast('Older version restored as draft — publish when ready'); onRestored(); } catch (e) { toast(e.message, true); }
+    if (!confirm('Restore this version?')) return;
+    try { await post(`/api/owner/roster/versions/${v.id}/restore`); toast('Version restored'); onRestored(); } catch (e) { toast(e.message, true); }
   };
   return (
     <Modal title="Roster history" onClose={() => { onClose(); onRestored && changed && onRestored(); }} wide>
       <div className="row between" style={{ alignItems: 'flex-start', flexWrap: 'nowrap' }}>
-        <p className="small muted" style={{ marginTop: 0 }}>Copies of this week's roster: saved drafts, and the previous version each time Claude makes a new roster or you restore one. Deleting a copy never changes your current roster.</p>
         {data?.length > 1 && <button className="danger" style={{ flex: 'none' }} onClick={clearAll}>Delete all</button>}
       </div>
       <ErrorBox error={error} />

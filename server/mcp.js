@@ -13,6 +13,7 @@ const INSTRUCTIONS = `RostaPay runs staff rosters and pay for a small business (
 You (Claude) do the thinking: read the owner's pay policy, staff list and availability, and draft rosters.
 RostaPay does the rest with plain code: stores everything, checks rosters against the rules, calculates pay from approved hours, and gives the owner and each worker their own login.
 Typical setup: get_business_overview → update_business_settings (limits + coverage) → upsert_staff → set_pay_rules → test_pay to verify each rule → create_roster for the week → tell the owner to review and publish it in the RostaPay app.
+Roles: each person has a main role plus skills (other jobs they can do). Each shift has the job done on it; pick from the person's skills. If you put someone on a job outside their skills RostaPay warns but allows it. Pay rules with a roles condition follow the job done on the shift.
 Dates are YYYY-MM-DD, times are 24h HH:MM, weeks start on Monday, money is INR.`;
 
 const text = (obj) => ({ content: [{ type: 'text', text: typeof obj === 'string' ? obj : JSON.stringify(obj, null, 2) }] });
@@ -47,7 +48,7 @@ function buildServer(biz, appUrl) {
     return text({
       business: { name: b.name, max_days_per_week: b.max_days_per_week, max_hours_per_day: b.max_hours_per_day, min_rest_hours: b.min_rest_hours },
       coverage: coverage.map(({ id, ...c }) => ({ ...c, day: DAY_NAMES[c.weekday] })),
-      staff: staff.map((s) => ({ id: s.id, name: s.name, phone: s.phone, role: s.role, availability: s.availability.map((a) => `${DAY_NAMES[a.weekday]} ${a.start_time}–${a.end_time}`), unavailable_dates: s.unavailable_dates.map((u) => `${u.date}${u.reason ? ` (${u.reason})` : ''}`) })),
+      staff: staff.map((s) => ({ id: s.id, name: s.name, phone: s.phone, role: s.role, also_can_do: s.skills || [], availability: s.availability.map((a) => `${DAY_NAMES[a.weekday]} ${a.start_time}–${a.end_time}`), unavailable_dates: s.unavailable_dates.map((u) => `${u.date}${u.reason ? ` (${u.reason})` : ''}`) })),
       pay_rules: rules.map((r) => ({ name: r.name, kind: r.kind, priority: r.priority, enabled: r.enabled, summary: r.summary, source_text: r.source_text, conditions: r.conditions, effect: r.effect })),
       current_week: { week_start: week.week_start, shifts: week.shifts.length, draft_shifts: week.draft_count, violations: week.violations.map((v) => v.message) },
       app_url: appUrl,
@@ -76,7 +77,8 @@ function buildServer(biz, appUrl) {
       staff: z.array(z.object({
         name: z.string(),
         phone: z.string().describe('10-digit Indian mobile number'),
-        role: z.string().optional().describe('e.g. barista, cook, cashier'),
+        role: z.string().optional().describe('Main job, e.g. barista, cook, cashier'),
+        skills: z.array(z.string()).optional().describe('Other jobs this person can also do, e.g. ["helper", "cashier"]. Replaces existing skills if given'),
         pin: z.string().regex(/^\d{4}$/).optional(),
         availability: z.array(z.object({ weekday: weekday.describe('0=Sun..6=Sat'), start_time: time, end_time: time })).optional(),
         unavailable_dates: z.array(z.object({ date, reason: z.string().optional() })).optional(),
@@ -113,13 +115,13 @@ Always fill source_text with the owner's wording. mode "replace" (default) repla
       end_time: time.describe('End time; at or before start means next day'),
       break_minutes: z.number().int().min(0).default(0),
       staff: z.string().optional().describe('Staff name or phone (optional)'),
-      role: z.string().optional().describe('Role to test with if no staff given'),
+      role: z.string().optional().describe('The job done on this shift (e.g. cook). Defaults to the staff member\'s main role'),
     },
   }, safe(async (a) => {
     toMinutes(a.start_time); toMinutes(a.end_time);
     const st = a.staff ? await svc.findStaff(bid, a.staff) : null;
     const rules = await svc.getRules(bid);
-    const r = computePay({ rules, staff: st || { id: 'test', role: a.role || '' }, logs: [{ id: 't', date: a.date, start: a.start_time, end: a.end_time, break_minutes: a.break_minutes }] });
+    const r = computePay({ rules, staff: st || { id: 'test', role: a.role || '' }, logs: [{ id: 't', date: a.date, start: a.start_time, end: a.end_time, break_minutes: a.break_minutes, role: a.role || undefined }] });
     return text({ worked: fmtHours(r.worked_minutes), breakdown: r.lines.map((l) => `${l.rule_name}: ${l.label} = ${fmtINR(l.amount)}`), total: fmtINR(r.total), warnings: r.warnings, manual_rules_not_included: r.manual_rules.map((m) => m.name) });
   }));
 
@@ -129,7 +131,7 @@ Always fill source_text with the owner's wording. mode "replace" (default) repla
     inputSchema: {
       week_start: date.describe('Any date in the week; normalised to Monday'),
       replace_existing: z.boolean().default(true),
-      shifts: z.array(z.object({ staff: z.string().describe('Staff name or phone'), date, start_time: time, end_time: time, role: z.string().optional(), notes: z.string().optional() })).min(1),
+      shifts: z.array(z.object({ staff: z.string().describe('Staff name or phone'), date, start_time: time, end_time: time, role: z.string().optional().describe('The job done on this shift. Defaults to the person\'s main role; can be any of their skills (also_can_do). Pay rules with a roles condition follow this job'), notes: z.string().optional() })).min(1),
     },
   }, safe(async (a) => text(rosterSummary(await svc.saveRoster(bid, a.week_start, a.shifts, a.replace_existing), appUrl))));
 

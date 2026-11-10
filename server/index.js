@@ -106,7 +106,7 @@ async function shiftBody(req) {
   if (!st) throw err(400, 'Pick a staff member');
   if (!isDate(date)) throw err(400, 'Invalid date');
   toMinutes(start_time); toMinutes(end_time);
-  return [st.id, date, start_time, end_time, role || st.role, notes || null];
+  return [st.id, date, start_time, end_time, (String(role || '').trim() || st.role || '').toLowerCase() || null, notes || null];
 }
 
 owner.post('/shifts', h(async (req, res) => {
@@ -154,12 +154,16 @@ owner.post('/roster/fix', h(async (req, res) => {
     const st = await one('SELECT id FROM staff WHERE id=$1 AND business_id=$2', [f.staff_id, B(req)]);
     if (!st) throw err(400, 'Unknown staff');
     toMinutes(f.start_time); toMinutes(f.end_time);
-    await q("UPDATE shifts SET staff_id=$2, start_time=$3, end_time=$4, status='draft' WHERE id=$1", [f.shift_id, st.id, f.start_time, f.end_time]);
+    await q("UPDATE shifts SET staff_id=$2, start_time=$3, end_time=$4, role=COALESCE($5, role), status='draft' WHERE id=$1", [f.shift_id, st.id, f.start_time, f.end_time, f.role ? String(f.role).toLowerCase() : null]);
   } else if (f.type === 'add_shift') {
     const st = await one('SELECT id, role FROM staff WHERE id=$1 AND business_id=$2', [f.staff_id, B(req)]);
     if (!st || !isDate(f.date)) throw err(400, 'Invalid fix');
     toMinutes(f.start_time); toMinutes(f.end_time);
-    await q("INSERT INTO shifts (business_id, staff_id, date, start_time, end_time, role, status) VALUES ($1,$2,$3,$4,$5,$6,'draft')", [B(req), st.id, f.date, f.start_time, f.end_time, st.role]);
+    await q("INSERT INTO shifts (business_id, staff_id, date, start_time, end_time, role, status) VALUES ($1,$2,$3,$4,$5,$6,'draft')", [B(req), st.id, f.date, f.start_time, f.end_time, f.role ? String(f.role).toLowerCase() : st.role]);
+  } else if (f.type === 'add_skill') {
+    const st = await one('SELECT id, role, skills FROM staff WHERE id=$1 AND business_id=$2', [f.staff_id, B(req)]);
+    if (!st || !f.skill) throw err(400, 'Invalid fix');
+    await q('UPDATE staff SET skills=$2 WHERE id=$1', [st.id, JSON.stringify(svc.cleanSkills([...(st.skills || []), f.skill], st.role))]);
   } else if (f.type === 'delete_shift') {
     await own('shifts', f.shift_id);
     await q('DELETE FROM shifts WHERE id=$1', [f.shift_id]);
@@ -175,15 +179,15 @@ owner.post('/roster/fix', h(async (req, res) => {
 
 owner.get('/staff', h(async (req, res) => res.json(await svc.getStaffFull(B(req)))));
 owner.post('/staff', h(async (req, res) => {
-  const { name, phone, role, pin, availability, unavailable_dates } = req.body || {};
+  const { name, phone, role, pin, availability, unavailable_dates, skills } = req.body || {};
   if (!name) throw err(400, 'Name is required');
   if (!/^\d{4}$/.test(String(pin || ''))) throw err(400, 'Set a 4-digit PIN for their login');
   const exists = await one('SELECT 1 FROM staff WHERE business_id=$1 AND phone=$2', [B(req), svc.cleanPhone(phone)]);
   if (exists) throw err(400, 'Someone with this phone number already exists');
-  res.json(await svc.upsertStaff(B(req), [{ name, phone, role, pin, availability, unavailable_dates }]));
+  res.json(await svc.upsertStaff(B(req), [{ name, phone, role, pin, availability, unavailable_dates, skills }]));
 }));
 owner.put('/staff/:id', h(async (req, res) => {
-  const { name, phone, role, pin, availability, unavailable_dates, active } = req.body || {};
+  const { name, phone, role, pin, availability, unavailable_dates, active, skills } = req.body || {};
   const p = svc.cleanPhone(phone);
   if (!name || !p) throw err(400, 'Name and a 10-digit phone are required');
   if (pin && !/^\d{4}$/.test(String(pin))) throw err(400, 'PIN must be 4 digits');
@@ -191,6 +195,7 @@ owner.put('/staff/:id', h(async (req, res) => {
     const row = await t.one('UPDATE staff SET name=$3, phone=$4, role=$5, active=COALESCE($6, active) WHERE id=$1 AND business_id=$2 RETURNING id', [req.params.id, B(req), name, p, role || null, active ?? null]);
     if (!row) throw err(404, 'Staff not found');
     if (pin) await t.q('UPDATE staff SET pin_hash=$2 WHERE id=$1', [row.id, bcrypt.hashSync(String(pin), 8)]);
+    if (Array.isArray(skills)) await t.q('UPDATE staff SET skills=$2 WHERE id=$1', [row.id, JSON.stringify(svc.cleanSkills(skills, role))]);
     await svc.setAvailability(t, row.id, availability, unavailable_dates);
   });
   res.json({ ok: true });
@@ -228,16 +233,16 @@ owner.post('/rules/test', h(async (req, res) => {
   toMinutes(start_time); toMinutes(end_time);
   const st = staff_id ? await one('SELECT id, role FROM staff WHERE id=$1 AND business_id=$2', [staff_id, B(req)]) : null;
   const rules = await svc.getRules(B(req));
-  res.json(computePay({ rules, staff: st || { id: 'test', role: role || '' }, logs: [{ id: 'test', date, start: start_time, end: end_time, break_minutes: Number(break_minutes) || 0 }] }));
+  res.json(computePay({ rules, staff: st || { id: 'test', role: role || '' }, logs: [{ id: 'test', date, start: start_time, end: end_time, break_minutes: Number(break_minutes) || 0, role: role || undefined }] }));
 }));
 
 owner.get('/hours', h(async (req, res) => {
   const status = ['pending', 'approved', 'rejected'].includes(req.query.status) ? req.query.status : 'pending';
-  const rows = await q(`SELECT l.*, st.name AS staff_name, st.role, s.start_time AS scheduled_start, s.end_time AS scheduled_end
+  const rows = await q(`SELECT l.*, st.name AS staff_name, COALESCE(s.role, st.role) AS role, s.start_time AS scheduled_start, s.end_time AS scheduled_end
       FROM time_logs l JOIN staff st ON st.id=l.staff_id LEFT JOIN shifts s ON s.id=l.shift_id
      WHERE l.business_id=$1 AND l.status=$2 ORDER BY l.date DESC, st.name LIMIT 200`, [B(req), status]);
   const rules = await svc.getRules(B(req));
-  res.json(rows.map((l) => ({ ...l, estimate: computePay({ rules, staff: { id: l.staff_id, role: l.role }, logs: [{ id: l.id, date: l.date, start: l.actual_start, end: l.actual_end, break_minutes: l.break_minutes }] }).total })));
+  res.json(rows.map((l) => ({ ...l, estimate: computePay({ rules, staff: { id: l.staff_id, role: l.role }, logs: [{ id: l.id, date: l.date, start: l.actual_start, end: l.actual_end, break_minutes: l.break_minutes, role: l.role }] }).total })));
 }));
 owner.post('/hours/:id/approve', h(async (req, res) => {
   const { actual_start, actual_end, break_minutes } = req.body || {};

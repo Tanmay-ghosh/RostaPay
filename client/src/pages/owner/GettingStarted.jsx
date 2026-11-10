@@ -19,7 +19,7 @@ export default function GettingStarted({ version }) {
   const steps = [
     {
       title: 'Connect your Claude',
-      why: 'Claude does the thinking — reading your policy and drafting rosters. Add your RostaPay link in Claude (Settings → Connectors), then send this message to check it works. Press ↻ Refresh here after.',
+      why: 'Add your RostaPay link in Claude under Settings → Connectors.',
       done: s.claude,
       doneText: 'Claude has used RostaPay',
       prompt: 'Check that you’re connected to RostaPay: show my business overview and tell me what’s already set up and what’s still missing.',
@@ -27,7 +27,7 @@ export default function GettingStarted({ version }) {
     },
     {
       title: 'Add your staff',
-      why: 'Name, phone, role and when each person can work. Their phone + PIN is their login.',
+      why: 'Name, phone, role, skills and availability.',
       done: s.staff > 0,
       doneText: `${s.staff} staff added`,
       prompt: 'Add my staff to RostaPay: Ravi 9876500001 barista, evenings only; Priya 9876500002 barista; Arjun 9876500003 cook, off on Wednesdays. Give each the PIN 1234.',
@@ -35,7 +35,7 @@ export default function GettingStarted({ version }) {
     },
     {
       title: 'Say how many people you need',
-      why: 'Coverage (e.g. 2 people from 8am to 11pm) and limits (e.g. max 6 days a week). Used to check every roster.',
+      why: 'Coverage and limits for each day.',
       done: s.coverage > 0,
       doneText: `${s.coverage} coverage rule${s.coverage === 1 ? '' : 's'} set`,
       prompt: 'In RostaPay, I need at least 2 people on shift from 8am to 11pm every day, and 3 from 12pm to 3pm on weekends. Nobody works more than 6 days a week or 10 hours a day.',
@@ -43,7 +43,7 @@ export default function GettingStarted({ version }) {
     },
     {
       title: 'Add your pay rules',
-      why: 'How you pay — base rate, overtime, night or festival extras. RostaPay applies them exactly.',
+      why: 'Base rate, overtime and allowances.',
       done: s.rules > 0,
       doneText: `${s.rules} pay rule${s.rules === 1 ? '' : 's'} active`,
       prompt: 'Set up my pay rules in RostaPay: ₹200 per hour; ₹300 per hour after 8 hours in a day; ₹100 extra for any shift that runs past 10pm; double pay on public holidays 26 Jan and 15 Aug 2027. Then test a 10-hour shift.',
@@ -51,10 +51,10 @@ export default function GettingStarted({ version }) {
     },
     {
       title: 'Make and publish your first roster',
-      why: 'Claude drafts the week; you check it here, fix anything flagged in red, then press “Publish week”.',
+      why: 'Review the draft and publish.',
       done: s.published > 0,
       doneText: 'Roster published — your staff can see their shifts',
-      pending: s.shifts > 0 && s.published === 0 ? 'Draft is ready below — review it and press “Publish week”.' : null,
+      pending: s.shifts > 0 && s.published === 0 ? 'Draft ready to publish.' : null,
       prompt: "Make next week's roster in RostaPay using my staff's availability and coverage needs.",
     },
   ];
@@ -62,18 +62,17 @@ export default function GettingStarted({ version }) {
   if (hidden || doneCount === steps.length) return null;
   const firstOpen = steps.findIndex((x) => !x.done);
   const active = open ?? firstOpen;
-  const copy = (t) => { try { navigator.clipboard.writeText(t); toast('Copied — paste it into Claude'); } catch { toast('Copy failed', true); } };
+  const copy = (t) => { try { navigator.clipboard.writeText(t); toast('Copied'); } catch { toast('Copy failed', true); } };
 
   return (
     <div className="card setup" style={{ marginBottom: '1rem', borderColor: '#9fd3cb' }}>
       <div className="row between">
         <div>
           <h2 style={{ margin: 0 }}>Getting started</h2>
-          <p className="small muted" style={{ margin: '.2rem 0 0' }}>RostaPay needs 4 things once, then runs the same loop every week.</p>
         </div>
         <div className="row">
           <span className="pill">{doneCount} of {steps.length} done</span>
-          <button className="ghost small" title="Re-check what's done" onClick={() => { setTick((x) => x + 1); toast('Checklist refreshed'); }}>↻ Refresh</button>
+          <button className="ghost small" title="Re-check what's done" onClick={() => { setTick((x) => x + 1); toast('Refreshed'); }}>↻ Refresh</button>
           <button className="ghost small" onClick={() => { try { localStorage.setItem(key, '1'); } catch { /* ignore */ } setHidden(true); }}>Hide</button>
         </div>
       </div>
@@ -92,7 +91,7 @@ export default function GettingStarted({ version }) {
                 {st.pending && <div className="notice small" style={{ marginBottom: '.5rem' }}>{st.pending}</div>}
                 {st.prompt && (
                   <>
-                    <div className="tiny muted" style={{ marginBottom: 4 }}>Say this to Claude (edit to fit your business):</div>
+                    <div className="tiny muted" style={{ marginBottom: 4 }}>Prompt for Claude</div>
                     <div className="row" style={{ alignItems: 'flex-start', flexWrap: 'nowrap' }}>
                       <div className="code grow">“{st.prompt}”</div>
                       <button className="secondary" onClick={() => copy(st.prompt)}>Copy</button>
@@ -108,13 +107,6 @@ export default function GettingStarted({ version }) {
           </li>
         ))}
       </ol>
-      <div className="weekly small">
-        <b>Then every week:</b>
-        <span>① Claude drafts the roster</span><span>→</span>
-        <span>② you publish it</span><span>→</span>
-        <span>③ staff log real hours on their phones</span><span>→</span>
-        <span>④ you approve on <Link to="/owner/hours">Hours</Link> and pay from <Link to="/owner/payouts">Payouts</Link></span>
-      </div>
     </div>
   );
 }

@@ -321,3 +321,4 @@ pre.code { white-space: pre-wrap; margin: 0; }
 @media (max-width: 860px) { .feature.reverse { grid-template-columns: 1fr; } }
 .l-nav nav { flex-wrap: nowrap; }
 @media (max-width: 520px) { .l-nav { padding: .8rem 1rem; } .l-nav nav { gap: .4rem; } .l-nav nav .btn { padding: .45rem .8rem; } .hide-sm { display: none; } }
+.tl-bar .tl-role { font-size: .68rem; opacity: .7; text-transform: lowercase; }

@@ -11,7 +11,7 @@ export const conditionsSchema = z.object({
   dates: z.array(date).optional().describe('Specific dates such as public holidays'),
   daily_hours_over: z.number().min(0).optional().describe('Only hours worked beyond N in the same day (daily overtime)'),
   weekly_hours_over: z.number().min(0).optional().describe('Only hours worked beyond N in the Mon–Sun week (weekly overtime)'),
-  roles: z.array(z.string()).optional().describe('Only staff with these roles, e.g. ["cook"]'),
+  roles: z.array(z.string()).optional().describe('Only hours worked in these jobs, e.g. ["cook"]. Matches the job done on the shift (shift role), not the person\'s main role'),
   staff_ids: z.array(z.string()).optional().describe('Only these staff ids'),
   min_shift_hours: z.number().min(0).optional().describe('Only shifts at least N hours long'),
   expression: z.any().optional().describe('Escape hatch: a JSON Logic expression evaluated per shift against {hours, day_of_week, date, role, staff_id, shift_start_hour, weekly_hours_so_far, month_day}. Example: {">=":[{"var":"shift_start_hour"},20]}'),

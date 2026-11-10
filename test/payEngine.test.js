@@ -81,3 +81,21 @@ describe('roster checks', () => {
     expect(types).toEqual(['availability', 'coverage', 'overlap', 'unavailable']);
   });
 });
+
+describe('roles', () => {
+  const rr = [
+    { id: 'b', name: 'Base', kind: 'rate', priority: 1, conditions: {}, effect: { rate_per_hour: 200 } },
+    { id: 'c', name: 'Cook bonus', kind: 'addon', priority: 2, conditions: { roles: ['cook'] }, effect: { extra_per_hour: 30 } },
+  ];
+  it('pays for the job done on the shift, not the main role', () => {
+    const cashierCovering = computePay({ rules: rr, staff: { id: 'p', role: 'cashier' }, logs: [{ id: '1', date: '2026-11-10', start: '10:00', end: '14:00', role: 'cook' }] });
+    expect(cashierCovering.total).toBe(4 * 230);
+    const cookOnTill = computePay({ rules: rr, staff: { id: 'a', role: 'cook' }, logs: [{ id: '2', date: '2026-11-10', start: '10:00', end: '14:00', role: 'cashier' }] });
+    expect(cookOnTill.total).toBe(4 * 200);
+  });
+  it('flags a job outside the person\'s skills', () => {
+    const v = checkRoster({ weekStart: '2026-11-09', staff: [{ id: 'p', name: 'Priya', role: 'cashier', skills: ['barista'] }],
+      shifts: [{ id: 's', staff_id: 'p', date: '2026-11-10', start_time: '10:00', end_time: '14:00', role: 'cook' }, { id: 't', staff_id: 'p', date: '2026-11-11', start_time: '10:00', end_time: '14:00', role: 'Barista' }] });
+    expect(v.map((x) => x.type)).toEqual(['skill']);
+  });
+});

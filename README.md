@@ -58,6 +58,14 @@ Example: ₹200/hr base, ₹300/hr after 8 hours, ₹100 for shifts running past
 
 These cases are covered by the tests (`npm test`).
 
+## Roles and skills
+
+Each person has a **main role** plus the **other jobs they can do** (for example Arjun: cook, can also do helper). Every shift records the **job done on that shift**:
+
+- Pay rules with a role condition (for example "cooks get +₹30/hr on Sundays") follow the job done on the shift, so a cashier covering a cook shift is paid as a cook for that shift.
+- Putting someone on a job outside their skills is allowed. RostaPay shows a warning with fixes: add the job to their skills, give the shift to someone who has it, or keep them in their main role.
+- When a role is short-staffed (for example "at least 1 cook from 11am to 3pm"), RostaPay suggests switching someone already on shift who has that skill, or adding someone free who has it.
+
 ## What each side can do
 
 - **Owner:**

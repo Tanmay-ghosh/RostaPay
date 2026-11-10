@@ -53,6 +53,7 @@ export async function migrate() {
     created_at timestamptz NOT NULL DEFAULT now(),
     UNIQUE (business_id, phone)
   );
+  ALTER TABLE staff ADD COLUMN IF NOT EXISTS skills jsonb NOT NULL DEFAULT '[]';
   CREATE TABLE IF NOT EXISTS availability (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     staff_id uuid NOT NULL REFERENCES staff(id) ON DELETE CASCADE,

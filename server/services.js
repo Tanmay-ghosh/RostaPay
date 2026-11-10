@@ -15,7 +15,7 @@ export async function getBusiness(bid) {
 }
 
 export async function getStaffFull(bid, { includeInactive = false } = {}) {
-  const staff = await q(`SELECT id, name, phone, role, active, pin_hash IS NOT NULL AS has_pin FROM staff WHERE business_id=$1 ${includeInactive ? '' : 'AND active'} ORDER BY created_at, name`, [bid]);
+  const staff = await q(`SELECT id, name, phone, role, skills, active, pin_hash IS NOT NULL AS has_pin FROM staff WHERE business_id=$1 ${includeInactive ? '' : 'AND active'} ORDER BY created_at, name`, [bid]);
   const ids = staff.map((s) => s.id);
   const avail = ids.length ? await q('SELECT staff_id, weekday, start_time, end_time FROM availability WHERE staff_id = ANY($1) ORDER BY weekday, start_time', [ids]) : [];
   const off = ids.length ? await q('SELECT id, staff_id, date, reason FROM unavailable_dates WHERE staff_id = ANY($1) ORDER BY date', [ids]) : [];
@@ -57,8 +57,9 @@ export async function getWeek(bid, week, { publishedOnly = false } = {}) {
 }
 
 async function logsFor(bid, staffId, dates, statuses) {
-  return q(`SELECT id, date, actual_start AS start, actual_end AS "end", break_minutes, status FROM time_logs
-             WHERE business_id=$1 AND staff_id=$2 AND date = ANY($3) AND status = ANY($4) ORDER BY date, actual_start`,
+  return q(`SELECT l.id, l.date, l.actual_start AS start, l.actual_end AS "end", l.break_minutes, l.status, sh.role FROM time_logs l
+             LEFT JOIN shifts sh ON sh.id = l.shift_id
+             WHERE l.business_id=$1 AND l.staff_id=$2 AND l.date = ANY($3) AND l.status = ANY($4) ORDER BY l.date, l.actual_start`,
   [bid, staffId, dates, statuses]);
 }
 
@@ -102,11 +103,19 @@ export async function getPayouts(bid, week) {
 // ---------- writes used by both UI and Claude ----------
 
 export async function findStaff(bid, ref) {
-  const all = await q('SELECT id, name, phone, role FROM staff WHERE business_id=$1 AND active', [bid]);
+  const all = await q('SELECT id, name, phone, role, skills FROM staff WHERE business_id=$1 AND active', [bid]);
   const key = String(ref || '').trim().toLowerCase();
   const digits = key.replace(/\D/g, '');
   return all.find((s) => s.id === ref) || (digits.length >= 10 && all.find((s) => s.phone.endsWith(digits.slice(-10)))) ||
     all.find((s) => s.name.toLowerCase() === key) || all.find((s) => s.name.toLowerCase().split(' ')[0] === key.split(' ')[0]);
+}
+
+// Main role + "can also do" skills, lower-cased and de-duplicated
+export function skillsOf(st) {
+  return [...new Set([st.role, ...(Array.isArray(st.skills) ? st.skills : [])].filter(Boolean).map((x) => String(x).trim().toLowerCase()))];
+}
+export function cleanSkills(list, role) {
+  return [...new Set((list || []).map((x) => String(x).trim().toLowerCase()).filter((x) => x && x !== String(role || '').toLowerCase()))];
 }
 
 export function cleanPhone(p) {
@@ -142,10 +151,11 @@ export async function upsertStaff(bid, list) {
       let pin = s.pin != null ? String(s.pin) : null;
       if (!row) {
         if (!pin) pin = String(Math.floor(1000 + Math.random() * 9000));
-        row = await t.one('INSERT INTO staff (business_id, name, phone, role, pin_hash) VALUES ($1,$2,$3,$4,$5) RETURNING id', [bid, s.name, phone, s.role || null, bcrypt.hashSync(pin, 8)]);
+        row = await t.one('INSERT INTO staff (business_id, name, phone, role, skills, pin_hash) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id', [bid, s.name, phone, s.role || null, JSON.stringify(cleanSkills(s.skills, s.role)), bcrypt.hashSync(pin, 8)]);
         out.push({ name: s.name, phone, status: 'added', pin });
       } else {
         await t.q('UPDATE staff SET name=$2, role=COALESCE($3, role), active=true WHERE id=$1', [row.id, s.name, s.role || null]);
+        if (Array.isArray(s.skills)) await t.q('UPDATE staff SET skills=$2 WHERE id=$1', [row.id, JSON.stringify(cleanSkills(s.skills, s.role))]);
         if (pin) await t.q('UPDATE staff SET pin_hash=$2 WHERE id=$1', [row.id, bcrypt.hashSync(pin, 8)]);
         out.push({ name: s.name, phone, status: 'updated', ...(pin ? { pin } : {}) });
       }
@@ -213,7 +223,7 @@ export async function saveRoster(bid, week, shifts, replace = true) {
     if (!st) { errors.push(`Unknown staff "${s.staff}"`); continue; }
     if (!dates.includes(s.date)) { errors.push(`${s.date} is outside the week starting ${start}`); continue; }
     try { toMinutes(s.start_time); toMinutes(s.end_time); } catch (e) { errors.push(e.message); continue; }
-    resolved.push({ ...s, staff_id: st.id, role: s.role || st.role });
+    resolved.push({ ...s, staff_id: st.id, role: (s.role || st.role || '').toLowerCase() || null });
   }
   if (errors.length) throw new Error(errors.join('; '));
   await tx(async (t) => {

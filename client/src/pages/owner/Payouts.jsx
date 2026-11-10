@@ -22,7 +22,7 @@ export default function Payouts() {
   return (
     <div>
       <div className="page-head">
-        <div><h1>Payouts</h1><p className="muted small">Calculated from approved hours using your pay rules. Click a person to see every line.</p></div>
+        <div><h1>Payouts</h1></div>
         <div className="row">
           <WeekNav week={week} onChange={(w) => setSp({ week: w })} />
           <a className="btn secondary" href={`/api/owner/payouts.csv?week=${week}`}>Export CSV</a>
@@ -74,7 +74,7 @@ export default function Payouts() {
                           <h3>By shift</h3>
                           {r.shifts.map((s) => (
                             <div key={s.log_id} style={{ marginBottom: 8 }}>
-                              <div className="row between small"><b>{niceDate(s.date)} · {s.start}–{s.end}{s.break_minutes ? ` (−${s.break_minutes}m)` : ''}</b><b>{fmtINR(s.total)}</b></div>
+                              <div className="row between small"><b>{niceDate(s.date)} · {s.start}–{s.end}{s.break_minutes ? ` (−${s.break_minutes}m)` : ''}{s.role ? ` · ${s.role}` : ''}</b><b>{fmtINR(s.total)}</b></div>
                               <div className="tiny muted">{s.lines.map((l) => `${l.rule_name}: ${l.label}`).join(' · ')}</div>
                             </div>
                           ))}

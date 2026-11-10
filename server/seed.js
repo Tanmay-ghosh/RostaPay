@@ -4,11 +4,11 @@ import { one, q, tx } from './db.js';
 import { addDays, todayIST, weekStart, weekDates } from './lib/time.js';
 
 const STAFF = [
-  { key: 'R', name: 'Ravi', phone: '9000000001', role: 'barista' },
-  { key: 'P', name: 'Priya', phone: '9000000002', role: 'barista' },
-  { key: 'A', name: 'Arjun', phone: '9000000003', role: 'cook' },
-  { key: 'M', name: 'Meena', phone: '9000000004', role: 'cashier' },
-  { key: 'S', name: 'Salim', phone: '9000000005', role: 'cook' },
+  { key: 'R', name: 'Ravi', phone: '9000000001', role: 'barista', skills: ['cashier'] },
+  { key: 'P', name: 'Priya', phone: '9000000002', role: 'barista', skills: ['cashier'] },
+  { key: 'A', name: 'Arjun', phone: '9000000003', role: 'cook', skills: ['helper'] },
+  { key: 'M', name: 'Meena', phone: '9000000004', role: 'cashier', skills: ['barista'] },
+  { key: 'S', name: 'Salim', phone: '9000000005', role: 'cook', skills: ['helper'] },
 ];
 
 // Mon..Sun → list of [staffKey, start, end]
@@ -47,7 +47,7 @@ export async function seedIfEmpty() {
     const pin = bcrypt.hashSync('1234', 8);
     const ids = {};
     for (const s of STAFF) {
-      const row = await t.one('INSERT INTO staff (business_id, name, phone, role, pin_hash) VALUES ($1,$2,$3,$4,$5) RETURNING id', [bid, s.name, s.phone, s.role, pin]);
+      const row = await t.one('INSERT INTO staff (business_id, name, phone, role, skills, pin_hash) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id', [bid, s.name, s.phone, s.role, JSON.stringify(s.skills), pin]);
       ids[s.key] = row.id;
       for (let wd = 0; wd < 7; wd++) {
         if (s.key === 'S' && wd === 1) continue; // Salim can't work Mondays

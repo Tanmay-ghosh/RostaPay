@@ -13,7 +13,6 @@ export default function LogHours() {
   return (
     <div>
       <h2>Log my hours</h2>
-      <p className="small muted" style={{ marginTop: 0 }}>Enter the time you actually started and finished. Your manager approves it, then it counts towards your pay.</p>
       {todo.length === 0 && <div className="ok">All caught up — no shifts waiting for hours.</div>}
       {todo.map((s) => <LogCard key={s.shift_id} s={s} onSaved={reload} />)}
       {done.length > 0 && <h3 style={{ marginTop: '1.4rem' }}>Submitted</h3>}
@@ -37,7 +36,7 @@ function LogCard({ s, onSaved, compact }) {
   const [busy, setBusy] = useState(false);
   const submit = async () => {
     setBusy(true);
-    try { await post('/api/worker/logs', { shift_id: s.shift_id, ...f }); toast('Hours sent to your manager'); onSaved(); } catch (e) { toast(e.message, true); } finally { setBusy(false); }
+    try { await post('/api/worker/logs', { shift_id: s.shift_id, ...f }); toast('Submitted'); onSaved(); } catch (e) { toast(e.message, true); } finally { setBusy(false); }
   };
   if (!open) return <button className="ghost small" onClick={() => setOpen(true)}>Change</button>;
   const worked = shiftDuration(f.actual_start, f.actual_end) - (Number(f.break_minutes) || 0);

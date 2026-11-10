@@ -71,9 +71,10 @@ export default function RosterTimeline({ data, today, badShift, onEdit, onAdd, o
                       className={`tl-bar ${s.status === 'draft' ? 'draft' : ''} ${bad ? 'bad' : ''}`}
                       style={{ left: pct(a), width: `calc(${((b - a) / span) * 100}% - 3px)`, top: 4 + lane * LANE_H, background: bg, color: fg, borderColor: bad ? undefined : fg + '55' }}
                       onClick={(e) => { e.stopPropagation(); onEdit(s); }}
-                      title={`${s.staff_name} · ${s.start_time}–${s.end_time}${s.status === 'draft' ? ' · draft' : ''}${log ? ` · hours ${log.status}` : ''}`}>
+                      title={`${s.staff_name} · ${s.role ? s.role + ' · ' : ''}${s.start_time}–${s.end_time}${s.status === 'draft' ? ' · draft' : ''}${log ? ` · hours ${log.status}` : ''}`}>
                       <b>{first(s.staff_name)}</b>
                       <span>{s.start_time}–{s.end_time}</span>
+                      {s.role && <span className="tl-role">{s.role}</span>}
                       {log && <span className="tl-tag">{log.status === 'approved' ? '✓' : log.status === 'pending' ? '⏱' : '✕'}</span>}
                     </div>
                   );

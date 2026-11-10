@@ -34,14 +34,16 @@ export function suggestFixes({ weekStart, staff, shifts, availability = [], unav
     const days = new Set(mine.map((x) => x.date)); days.add(date);
     return days.size <= maxD;
   }
-  const roleOk = (sid, role) => !role || String(staff.find((x) => x.id === sid)?.role || '').toLowerCase() === String(role).toLowerCase();
+  const skillsOf = (sid) => { const p = staff.find((x) => x.id === sid); return p ? [p.role, ...(Array.isArray(p.skills) ? p.skills : [])].filter(Boolean).map((x) => String(x).toLowerCase()) : []; };
+  const roleOk = (sid, role) => !role || skillsOf(sid).includes(String(role).toLowerCase());
+  const shiftRole = (x) => String(x.role || staff.find((p) => p.id === x.staff_id)?.role || '').toLowerCase();
   const t = (m) => fromMinutes(m);
 
   function coverageFixes(v) {
     const fixes = [];
     const { date, gap_start: gs, gap_end: ge } = v;
     // 1) extend someone already working that day so their shift covers the gap
-    for (const sh of shifts.filter((x) => x.date === date && roleOk(x.staff_id, v.role))) {
+    for (const sh of shifts.filter((x) => x.date === date && (!v.role || shiftRole(x) === String(v.role).toLowerCase()))) {
       const [s, e] = span(sh);
       if (s <= gs && e >= ge) continue; // already covering
       if (!(s <= ge && e >= gs)) continue; // only extend shifts that touch the gap
@@ -60,7 +62,15 @@ export function suggestFixes({ weekStart, staff, shifts, availability = [], unav
         else if (fits(p.id, date, ge - MIN_NEW_SHIFT, ge) && ge - MIN_NEW_SHIFT >= v.req_start) ns = ge - MIN_NEW_SHIFT;
       }
       if (!limitsOk(p.id, date, ns, ne)) continue;
-      fixes.push({ type: 'add_shift', staff_id: p.id, date, start_time: t(ns), end_time: t(ne), cost_minutes: ne - ns, label: `Add ${first(p.id)} ${t(ns)}–${t(ne)}` });
+      fixes.push({ type: 'add_shift', staff_id: p.id, date, start_time: t(ns), end_time: t(ne), role: v.role || undefined, cost_minutes: ne - ns, label: `Add ${first(p.id)}${v.role ? ` as ${v.role}` : ''} ${t(ns)}–${t(ne)}` });
+    }
+    if (v.role) {
+      for (const sh of shifts.filter((x) => x.date === date && shiftRole(x) !== String(v.role).toLowerCase() && roleOk(x.staff_id, v.role))) {
+        const [s, e] = span(sh);
+        if (!(s <= gs && e >= ge)) continue; // must cover the whole gap
+        fixes.push({ type: 'update_shift', shift_id: sh.id, staff_id: sh.staff_id, date, start_time: sh.start_time, end_time: sh.end_time, role: v.role, cost_minutes: 1,
+          label: `Switch ${first(sh.staff_id)} from ${shiftRole(sh)} to ${v.role} (${sh.start_time}–${sh.end_time})` });
+      }
     }
     fixes.sort((a, b) => a.cost_minutes - b.cost_minutes);
     const top = fixes.slice(0, 3);
@@ -73,22 +83,24 @@ export function suggestFixes({ weekStart, staff, shifts, availability = [], unav
     const onShift = new Set(shifts.filter((x) => x.date === date && (() => { const [a, b] = span(x); return a < ge && gs < b; })()).map((x) => x.staff_id));
     const freeButCapped = staff.filter((p) => !onShift.has(p.id) && roleOk(p.id, v.role)).some((p) => { const w = windows(p.id, date); return w === null || w.some(([ws, we]) => ws <= gs && ge <= we); });
     const why = freeButCapped
-      ? `The people available at ${t(gs)}–${t(ge)} are already at their daily or weekly limit.`
-      : `${onShift.size ? 'Apart from who is already on shift, nobody' : 'Nobody'} is available ${t(gs)}–${t(ge)} on ${days}, so no roster can fill this.`;
+      ? `Everyone available at ${t(gs)}–${t(ge)} is at their limit.`
+      : v.role && !staff.some((p) => roleOk(p.id, v.role))
+        ? `No one on the team has the ${v.role} skill.`
+        : `${onShift.size ? 'No one else' : 'Nobody'}${v.role ? ` who can work as a ${v.role}` : ''} is available ${t(gs)}–${t(ge)} on ${days}.`;
     const out = [];
     if (ge >= v.req_end && gs > v.req_start) out.push({ type: 'coverage', coverage_id: v.coverage_id, end_time: t(gs), label: `Close at ${t(gs)} on ${days} (instead of ${t(v.req_end)})`, group: `Close at ${t(gs)} instead of ${t(v.req_end)}` });
     else if (gs <= v.req_start && ge < v.req_end) out.push({ type: 'coverage', coverage_id: v.coverage_id, start_time: t(ge), label: `On ${days}, start the ${v.need}-person minimum at ${t(ge)} instead of ${t(v.req_start)}`, group: `Start the ${v.need}-person minimum at ${t(ge)}` });
     else if (v.have > 0) out.push({ type: 'coverage', coverage_id: v.coverage_id, min_staff: v.have, label: `Lower the minimum on ${days} ${t(v.req_start)}–${t(v.req_end)} to ${v.have}`, group: `Lower minimum to ${v.have}` });
-    return { fixes: out, infeasible: true, why, note: freeButCapped ? 'Or raise the max days/hours limit in Settings.' : 'Other options: ask someone to widen their availability, or hire for this slot.' };
+    return { fixes: out, infeasible: true, why, note: freeButCapped ? 'Or raise the max days/hours limit in Settings.' : v.role ? `Other options: add ${v.role} to someone's skills on the Staff page, ask someone to widen their availability, or hire.` : 'Other options: ask someone to widen their availability, or hire for this slot.' };
   }
 
   function reassignFixes(sh, reason) {
     const [s, e] = span(sh);
     const out = [];
     for (const p of staff) {
-      if (p.id === sh.staff_id) continue;
+      if (p.id === sh.staff_id || (sh.role && !roleOk(p.id, sh.role))) continue;
       if (!fits(p.id, sh.date, s, e) || !limitsOk(p.id, sh.date, s, e)) continue;
-      out.push({ type: 'update_shift', shift_id: sh.id, staff_id: p.id, date: sh.date, start_time: sh.start_time, end_time: sh.end_time, label: `Give this shift to ${first(p.id)}` });
+      out.push({ type: 'update_shift', shift_id: sh.id, staff_id: p.id, date: sh.date, start_time: sh.start_time, end_time: sh.end_time, role: sh.role || undefined, label: `Give this shift to ${first(p.id)}` });
     }
     // trim to the person's own availability if they are partly available
     const w = windows(sh.staff_id, sh.date);
@@ -105,6 +117,15 @@ export function suggestFixes({ weekStart, staff, shifts, availability = [], unav
   return violations.map((v) => {
     try {
       if (v.type === 'coverage') return { ...v, ...coverageFixes(v) };
+      if (v.type === 'skill') {
+        const sh = shifts.find((x) => x.id === v.shift_id);
+        if (!sh) return v;
+        const p = staff.find((x) => x.id === sh.staff_id);
+        const fixes = [{ type: 'add_skill', staff_id: sh.staff_id, skill: v.role, label: `Add ${v.role} to ${first(sh.staff_id)}'s skills` }];
+        fixes.push(...reassignFixes(sh, 'skill').filter((x) => x.type === 'update_shift' && x.staff_id !== sh.staff_id).slice(0, 2).map((x) => ({ ...x, label: `${x.label} (${v.role})` })));
+        if (p?.role) fixes.push({ type: 'update_shift', shift_id: sh.id, staff_id: sh.staff_id, date: sh.date, start_time: sh.start_time, end_time: sh.end_time, role: String(p.role).toLowerCase(), label: `Keep ${first(sh.staff_id)} as ${String(p.role).toLowerCase()} for this shift` });
+        return { ...v, fixes, note: 'This is only a warning — small teams cover for each other. Pay follows the job done on the shift.' };
+      }
       if (v.type === 'availability' || v.type === 'unavailable' || v.type === 'overlap' || v.type === 'rest') {
         const sh = shifts.find((x) => x.id === v.shift_id);
         return sh ? { ...v, fixes: reassignFixes(sh, v.type) } : v;

@@ -65,6 +65,17 @@ export function checkRoster({ weekStart, staff, shifts, availability = [], unava
     if (!fits) v.push({ type: 'availability', staff_id: sh.staff_id, shift_id: sh.id, date: sh.date, message: `${who}'s ${label(sh.date)} shift ${sh.start_time}–${sh.end_time} is outside their availability` });
   }
 
+  // 2b. Job outside the person's skills (warning, with fixes)
+  for (const sh of inWeek) {
+    const person = staff.find((x) => x.id === sh.staff_id);
+    if (!person || !sh.role) continue;
+    const skills = [person.role, ...(Array.isArray(person.skills) ? person.skills : [])].filter(Boolean).map((x) => String(x).toLowerCase());
+    if (skills.length && !skills.includes(String(sh.role).toLowerCase())) {
+      v.push({ type: 'skill', staff_id: sh.staff_id, shift_id: sh.id, date: sh.date, role: String(sh.role).toLowerCase(),
+        message: `${person.name} isn't set up as a ${String(sh.role).toLowerCase()} (${label(sh.date)} ${sh.start_time}–${sh.end_time})` });
+    }
+  }
+
   // 3. Per-person limits
   for (const person of staff) {
     const mine = inWeek.filter((sh) => sh.staff_id === person.id).sort((a, b) => abs(a).s - abs(b).s);

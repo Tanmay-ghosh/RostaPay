@@ -14,7 +14,7 @@ export default function Swaps() {
   const act = async (s, a) => { try { await post(`/api/owner/swaps/${s.id}/${a}`); toast(a === 'approve' ? `Shift moved to ${s.to_name}` : 'Swap rejected'); reload(); refreshMe(); } catch (e) { toast(e.message, true); } };
   return (
     <div>
-      <div className="page-head"><div><h1>Shift swaps</h1><p className="muted small">Staff ask a colleague to take a shift. Once the colleague accepts, you give the final OK and the roster updates for everyone.</p></div></div>
+      <div className="page-head"><div><h1>Shift swaps</h1></div></div>
       {data.length === 0 ? <div className="card"><p className="muted" style={{ margin: 0 }}>No swap requests yet.</p></div> : (
         <div className="card" style={{ padding: 0 }}>
           <table>

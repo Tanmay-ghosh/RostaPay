@@ -19,7 +19,7 @@ export default function Hours() {
   return (
     <div>
       <div className="page-head">
-        <div><h1>Hours</h1><p className="muted small">Staff log the hours they actually worked. Pay is only calculated from hours you approve.</p></div>
+        <div><h1>Hours</h1></div>
         {status === 'pending' && data?.length > 0 && <button onClick={approveAll}>Approve all ({data.length})</button>}
       </div>
       <div className="tabs" style={{ maxWidth: 420 }}>

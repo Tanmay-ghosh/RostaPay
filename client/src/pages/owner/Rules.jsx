@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { post, put, del, patch } from '../../api.js';
 import { useLoad, useToast } from '../../hooks.js';
-import { Modal, Spinner, ErrorBox, Breakdown, DAY_NAMES, todayIST, fmtHours } from '../../components.jsx';
+import { Modal, Spinner, ErrorBox, Breakdown, DAY_NAMES, todayIST, fmtHours, skillsOf } from '../../components.jsx';
 
 const KIND_INFO = {
   rate: ['Hourly rate', 'Sets the rate for matching hours. Highest priority wins.'],
@@ -21,8 +21,8 @@ export default function Rules() {
   return (
     <div>
       <div className="page-head">
-        <div><h1>Pay rules</h1><p className="muted small">Your pay policy as exact rules. Claude writes them from your words; RostaPay applies them the same way every week.</p></div>
-        <div className="row"><button className="secondary" onClick={() => { reload(); setRefresh((x) => x + 1); toast('Rules and tester refreshed'); }} title="Load rules Claude just changed and recalculate the tester">↻ Refresh</button>
+        <div><h1>Pay rules</h1></div>
+        <div className="row"><button className="secondary" onClick={() => { reload(); setRefresh((x) => x + 1); toast('Refreshed'); }}>↻ Refresh</button>
         <button onClick={() => setEdit({ name: '', source_text: '', kind: 'rate', priority: 1, conditions: {}, effect: { rate_per_hour: 200 }, enabled: true })}>+ Add rule</button></div>
       </div>
       <div className="grid2" style={{ alignItems: 'start' }}>
@@ -53,7 +53,7 @@ export default function Rules() {
 function Tester({ version, refresh }) {
   const { data: staff, reload: reloadStaff } = useLoad('/api/owner/staff');
   useEffect(() => { if (refresh) reloadStaff(); }, [refresh]);
-  const [f, setF] = useState({ staff_id: '', date: todayIST(), start_time: '14:00', end_time: '00:30', break_minutes: 0 });
+  const [f, setF] = useState({ staff_id: '', role: '', date: todayIST(), start_time: '14:00', end_time: '00:30', break_minutes: 0 });
   const [res, setRes] = useState(null);
   const [error, setError] = useState(null);
   useEffect(() => { if (staff?.length && !f.staff_id) setF((x) => ({ ...x, staff_id: staff[0].id })); }, [staff]);
@@ -66,9 +66,9 @@ function Tester({ version, refresh }) {
   return (
     <div className="card" style={{ position: 'sticky', top: 16, margin: 0 }}>
       <h3>🧪 Rule tester</h3>
-      <p className="small muted" style={{ marginTop: 0 }}>Try any shift and see exactly how it would be paid.</p>
       <div className="grid2">
-        <div className="field"><label>Staff</label><select value={f.staff_id} onChange={set('staff_id')}>{(staff || []).map((s) => <option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}</select></div>
+        <div className="field"><label>Staff</label><select value={f.staff_id} onChange={(e) => setF({ ...f, staff_id: e.target.value, role: '' })}>{(staff || []).map((s) => <option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}</select></div>
+        <div className="field"><label>Job on this shift</label><select value={f.role} onChange={set('role')}>{(() => { const p = (staff || []).find((s) => s.id === f.staff_id); return [<option key="" value="">{p?.role ? `${p.role} (main role)` : 'main role'}</option>, ...skillsOf(p).filter((r) => r !== String(p?.role || '').toLowerCase()).map((r) => <option key={r} value={r}>{r}</option>)]; })()}</select></div>
         <div className="field"><label>Date</label><input type="date" value={f.date} onChange={set('date')} /></div>
         <div className="field"><label>Start</label><input type="time" value={f.start_time} onChange={set('start_time')} /></div>
         <div className="field"><label>End</label><input type="time" value={f.end_time} onChange={set('end_time')} /></div>
@@ -127,7 +127,7 @@ function RuleModal({ init, onClose, onSaved }) {
       const effect = f.kind === 'manual' ? {} : { [effectKey]: numOrUndef(f.effectValue), ...(f.kind === 'addon' && f.cap !== '' ? { weekly_cap: Number(f.cap) } : {}) };
       const body = { name: f.name, source_text: f.source_text, kind: f.kind, priority: Number(f.priority) || 0, enabled: f.enabled, conditions, effect };
       if (init.id) await put(`/api/owner/rules/${init.id}`, body); else await post('/api/owner/rules', body);
-      toast('Rule saved — check it in the tester');
+      toast('Rule saved');
       onSaved();
     } catch (e) { setError(e); }
   };
@@ -142,7 +142,6 @@ function RuleModal({ init, onClose, onSaved }) {
           <div className="field"><label>Priority</label><input type="number" value={f.priority} onChange={set('priority')} /></div>
         </div>
       </div>
-      <p className="tiny muted" style={{ marginTop: -6 }}>{KIND_INFO[f.kind][1]}</p>
       <div className="field"><label>In your words</label><textarea style={{ minHeight: 50 }} value={f.source_text} onChange={set('source_text')} placeholder="After 8 hours in a day, pay ₹300 per hour." /></div>
 
       {f.kind !== 'manual' && <>
@@ -153,14 +152,14 @@ function RuleModal({ init, onClose, onSaved }) {
           {f.kind === 'addon' && <div className="field"><label>Weekly cap ₹ (optional)</label><input type="number" value={f.cap} onChange={set('cap')} /></div>}
         </div>
 
-        <h3 style={{ marginTop: '.6rem' }}>When it applies <span className="tiny muted">(leave blank = always)</span></h3>
+        <h3 style={{ marginTop: '.6rem' }}>When it applies</h3>
         <div className="grid2">
           <div className="field"><label>Clock window (e.g. night 22:00–06:00)</label><div className="row"><input type="time" value={f.tw_start} onChange={set('tw_start')} style={{ width: 'auto', flex: 1 }} /><span>–</span><input type="time" value={f.tw_end} onChange={set('tw_end')} style={{ width: 'auto', flex: 1 }} /></div></div>
           <div className="field"><label>Days of week</label><div className="row">{[1, 2, 3, 4, 5, 6, 0].map((d) => <button key={d} type="button" className={f.days.includes(d) ? '' : 'secondary'} style={{ padding: '.3rem .5rem' }} onClick={() => toggleDay(d)}>{DAY_NAMES[d]}</button>)}</div></div>
           <div className="field"><label>Hours beyond N in a day</label><input type="number" step="any" value={f.daily} onChange={set('daily')} placeholder="e.g. 8" /></div>
           <div className="field"><label>Hours beyond N in a week</label><input type="number" step="any" value={f.weekly} onChange={set('weekly')} placeholder="e.g. 48" /></div>
           <div className="field"><label>Specific dates (comma-separated)</label><input value={f.dates} onChange={set('dates')} placeholder="e.g. 2026-11-08, 2027-01-26" /></div>
-          <div className="field"><label>Only these roles (comma-separated)</label><input value={f.roles} onChange={set('roles')} placeholder="e.g. cook" /></div>
+          <div className="field"><label>Only when the job on the shift is (comma-separated)</label><input value={f.roles} onChange={set('roles')} placeholder="e.g. cook" /></div>
           <div className="field"><label>Only shifts at least N hours</label><input type="number" step="any" value={f.min_shift} onChange={set('min_shift')} /></div>
           <div className="field"><label>Custom formula (JSON Logic, advanced)</label><input value={f.expression} onChange={set('expression')} placeholder='{">=":[{"var":"shift_start_hour"},20]}' /></div>
         </div>

@@ -21,7 +21,7 @@ export default function Swaps() {
   const request = async () => {
     try { await post('/api/worker/swaps', f); toast('Request sent'); setF({ shift_id: '', to_staff_id: '' }); swaps.reload(); } catch (e) { toast(e.message, true); }
   };
-  const act = async (s, a) => { try { await post(`/api/worker/swaps/${s.id}/${a}`); toast(a === 'accept' ? 'Accepted — your manager will confirm' : 'Done'); swaps.reload(); } catch (e) { toast(e.message, true); } };
+  const act = async (s, a) => { try { await post(`/api/worker/swaps/${s.id}/${a}`); toast(a === 'accept' ? 'Accepted' : 'Done'); swaps.reload(); } catch (e) { toast(e.message, true); } };
   const incoming = swaps.data.filter((s) => !s.mine && s.status === 'pending_colleague');
   return (
     <div>
