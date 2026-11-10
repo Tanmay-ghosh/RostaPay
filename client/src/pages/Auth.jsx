@@ -15,7 +15,7 @@ export function OwnerAuth() {
     setBusy(true); setError(null);
     try {
       await post(mode === 'login' ? '/api/auth/owner/login' : '/api/auth/owner/signup', f);
-      nav(mode === 'login' ? '/owner/roster' : '/owner/settings');
+      nav('/owner/roster');
     } catch (err) { setError(err); } finally { setBusy(false); }
   };
   return (

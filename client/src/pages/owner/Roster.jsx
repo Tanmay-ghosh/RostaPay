@@ -4,6 +4,7 @@ import { post, put, del } from '../../api.js';
 import { useLoad, useToast } from '../../hooks.js';
 import { WeekNav, Modal, Spinner, ErrorBox, niceDate, DAY_NAMES, dayOfWeek, todayIST, weekStart, fmtHours } from '../../components.jsx';
 import { shiftDuration } from '../../../../server/lib/time.js';
+import GettingStarted from './GettingStarted.jsx';
 
 export default function Roster() {
   const [sp, setSp] = useSearchParams();
@@ -45,6 +46,8 @@ export default function Roster() {
           <button className="amber" onClick={publish} disabled={!data.draft_count}>Publish week{data.draft_count ? ` (${data.draft_count})` : ''}</button>
         </div>
       </div>
+
+      <GettingStarted version={data.shifts.length + '|' + data.draft_count + '|' + data.staff.length} />
 
       {data.staff.length === 0 && (
         <div className="notice" style={{ marginBottom: '1rem' }}>No staff yet. Ask Claude to add your team, or add them on the <Link to="/owner/staff">Staff</Link> page.</div>

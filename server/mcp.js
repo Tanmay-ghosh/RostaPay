@@ -155,6 +155,7 @@ Always fill source_text with the owner's wording. mode "replace" (default) repla
 export async function handleMcp(req, res) {
   const biz = await one('SELECT id, name FROM businesses WHERE mcp_key=$1', [req.params.key]);
   if (!biz) return res.status(404).json({ jsonrpc: '2.0', error: { code: -32001, message: 'Unknown RostaPay connection link. Copy it again from Settings → Connect Claude.' }, id: null });
+  if (req.body?.method === 'tools/call') await one('UPDATE businesses SET mcp_last_used_at=now() WHERE id=$1 RETURNING id', [biz.id]);
   const appUrl = process.env.PUBLIC_URL || process.env.RENDER_EXTERNAL_URL || `${req.protocol}://${req.get('host')}`;
   const server = buildServer(biz, appUrl);
   const transport = new StreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });

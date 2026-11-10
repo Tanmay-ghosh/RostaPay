@@ -87,6 +87,17 @@ owner.get('/me', h(async (req, res) => {
   res.json({ business: { id: biz.id, name: biz.name }, owner: o, counts, is_demo: o.email === 'demo@rostapay.app' });
 }));
 
+owner.get('/onboarding', h(async (req, res) => {
+  const r = await one(`SELECT
+      (SELECT mcp_last_used_at FROM businesses WHERE id=$1) AS claude_at,
+      (SELECT count(*)::int FROM staff WHERE business_id=$1 AND active) AS staff,
+      (SELECT count(*)::int FROM coverage_requirements WHERE business_id=$1) AS coverage,
+      (SELECT count(*)::int FROM pay_rules WHERE business_id=$1 AND enabled) AS rules,
+      (SELECT count(*)::int FROM shifts WHERE business_id=$1) AS shifts,
+      (SELECT count(*)::int FROM shifts WHERE business_id=$1 AND status='published') AS published`, [B(req)]);
+  res.json({ claude: !!r.claude_at, staff: r.staff, coverage: r.coverage, rules: r.rules, shifts: r.shifts, published: r.published });
+}));
+
 owner.get('/roster', h(async (req, res) => res.json(await svc.getWeek(B(req), req.query.week))));
 
 async function shiftBody(req) {

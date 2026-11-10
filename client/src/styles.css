@@ -184,3 +184,18 @@ pre.code { white-space: pre-wrap; margin: 0; }
 .spinner { padding: 2rem; text-align: center; color: var(--muted); }
 .grid2 > .card, .grid3 > .card { margin-top: 0; }
 @media (min-width: 861px) { .owner-shell { background: linear-gradient(to right, #fff 230px, var(--bg) 230px); } }
+
+/* ---------- getting started checklist ---------- */
+.progress { height: 6px; background: #eef4f2; border-radius: 99px; margin: .8rem 0 .4rem; overflow: hidden; }
+.progress > div { height: 100%; background: var(--teal); border-radius: 99px; transition: width .3s; }
+.setup-steps { list-style: none; padding: 0; margin: .4rem 0 0; }
+.setup-steps li { border-bottom: 1px solid #f1ece4; }
+.setup-steps li:last-child { border-bottom: 0; }
+.setup-head { width: 100%; background: transparent; color: var(--ink); justify-content: flex-start; gap: .7rem; padding: .6rem .2rem; border-radius: 8px; font-weight: 600; }
+.setup-head:hover { background: #faf7f2; }
+.setup-steps .tick { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: .8rem; font-weight: 800; background: #f1efea; color: var(--muted); flex: none; }
+.setup-steps li.done .tick { background: var(--teal); color: #fff; }
+.setup-steps li.done .setup-head > .grow { color: var(--muted); text-decoration: line-through; text-decoration-color: #c9c2b5; }
+.setup-steps li.open:not(.done) .tick { background: var(--amber); color: #3b2300; }
+.setup-body { padding: 0 .2rem .8rem 2.6rem; }
+.weekly { display: flex; flex-wrap: wrap; gap: .35rem .5rem; align-items: center; background: #f8f5ef; border-radius: 10px; padding: .6rem .8rem; margin-top: .6rem; color: #415150; }

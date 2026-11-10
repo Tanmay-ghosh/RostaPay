@@ -33,6 +33,7 @@ export async function migrate() {
     max_days_per_week int, max_hours_per_day numeric, min_rest_hours numeric,
     created_at timestamptz NOT NULL DEFAULT now()
   );
+  ALTER TABLE businesses ADD COLUMN IF NOT EXISTS mcp_last_used_at timestamptz;
   CREATE TABLE IF NOT EXISTS owners (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     business_id uuid NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,
