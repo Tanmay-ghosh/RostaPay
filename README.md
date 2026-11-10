@@ -11,8 +11,8 @@ RostaPay is shift rostering and pay calculation for small Indian businesses with
 | | Login |
 |---|---|
 | Owner (Brew & Bites Café, Koramangala) | `demo@rostapay.app` / `RostaPay@2026` |
-| Staff (Ravi, barista) | phone `9000000001`, PIN `1234` |
-| Other staff | phones `9000000002` to `9000000005`, PIN `1234` |
+| Staff (Ravi, barista) | phone `1000000001`, PIN `1234` |
+| Other staff | phones `1000000002` to `1000000005`, PIN `1234` (reserved demo numbers — real staff numbers must start with 6–9) |
 
 The owner can restore the demo data at any time from **Settings → Reset demo data**.
 

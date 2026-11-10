@@ -146,6 +146,9 @@ export function computePay({ rules: rawRules, staff, logs }) {
       acc.set(key, cur);
     };
     let firstBase = null;
+    // Lowest override priority seen across the shift's minutes (-Infinity if any minute had no override).
+    // A per-shift addon without minute conditions is suppressed only if an override of equal/higher priority covered every minute.
+    let shiftFloor = Infinity;
 
     for (let i = 0; i < worked; i++) {
       const abs = s + i;
@@ -165,7 +168,9 @@ export function computePay({ rules: rawRules, staff, logs }) {
       } else {
         bump(null, 'unpriced', 0);
       }
-      for (const a of addons) if (hasMinuteConditions(a.conditions) && minuteMatch(a, m)) matchedAny.add(a.id);
+      shiftFloor = Math.min(shiftFloor, floor);
+      // An override "replaces everything with lower priority for matching hours" — that includes flat/deduction/minimum addons.
+      for (const a of addons) if (hasMinuteConditions(a.conditions) && a.priority > floor && minuteMatch(a, m)) matchedAny.add(a.id);
       for (const a of perMinuteAddons) {
         if (a.priority <= floor) continue;
         if (!minuteMatch(a, m)) continue;
@@ -196,6 +201,7 @@ export function computePay({ rules: rawRules, staff, logs }) {
     }
     for (const a of addons) {
       if (!matchedAny.has(a.id)) continue;
+      if (!hasMinuteConditions(a.conditions) && worked > 0 && a.priority <= shiftFloor) continue;
       const e = a.effect;
       if (e.flat_amount != null) pushCapped(a, 'flat', 0, 0, Number(e.flat_amount));
       if (e.deduction != null) addLine(shiftLines, a, 'deduction', 0, 0, -Math.abs(Number(e.deduction)));

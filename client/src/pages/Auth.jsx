@@ -56,11 +56,16 @@ export function WorkerLogin() {
   const [pin, setPin] = useState('');
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
-  const submit = async (e) => {
-    e.preventDefault();
+  const [choices, setChoices] = useState(null); // same phone + PIN at several businesses → pick one
+  const login = async (business_id) => {
     setBusy(true); setError(null);
-    try { await post('/api/auth/worker/login', { phone, pin }); nav('/staff/week'); } catch (err) { setError(err); } finally { setBusy(false); }
+    try {
+      const r = await post('/api/auth/worker/login', { phone, pin, ...(business_id ? { business_id } : {}) });
+      if (r?.choose_business) { setChoices(r.choose_business); return; }
+      nav('/staff/week');
+    } catch (err) { setError(err); } finally { setBusy(false); }
   };
+  const submit = (e) => { e.preventDefault(); setChoices(null); login(); };
   return (
     <div className="auth">
       <div className="card">
@@ -73,10 +78,17 @@ export function WorkerLogin() {
           <ErrorBox error={error} />
           <button className="big" style={{ marginTop: '.8rem' }} disabled={busy}>{busy ? 'Please wait…' : 'Log in'}</button>
         </form>
+        {choices && (
+          <div className="card" style={{ marginTop: '.8rem' }}>
+            <b>Which workplace?</b>
+            <p className="small muted">This number works at more than one business.</p>
+            {choices.map((c) => <button key={c.business_id} className="secondary" type="button" style={{ display: 'block', width: '100%', marginTop: 6 }} disabled={busy} onClick={() => login(c.business_id)}>{c.name}</button>)}
+          </div>
+        )}
         <div className="demo-hint">
-          <b>Demo staff login</b> (Ravi, barista)<br />Phone <code>9000000001</code> · PIN <code>1234</code>
-          <div className="tiny" style={{ marginTop: 4 }}>Other demo staff: 9000000002 – 9000000005, same PIN.</div>
-          <div style={{ marginTop: 6 }}><button className="secondary" type="button" onClick={() => { setPhone('9000000001'); setPin('1234'); }}>Fill demo login</button></div>
+          <b>Demo staff login</b> (Brew &amp; Bites Café — Ravi, barista)<br />Phone <code>1000000001</code> · PIN <code>1234</code>
+          <div className="tiny" style={{ marginTop: 4 }}>Other demo staff: 1000000002 – 1000000005, same PIN. Demo numbers can't be used by real businesses.</div>
+          <div style={{ marginTop: 6 }}><button className="secondary" type="button" onClick={() => { setPhone('1000000001'); setPin('1234'); }}>Fill demo login</button></div>
         </div>
         <p className="small muted" style={{ marginTop: '1rem' }}>Business owner? <Link to="/owner/login">Owner login →</Link></p>
       </div>

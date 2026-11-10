@@ -20,6 +20,11 @@ export function checkRoster({ weekStart, staff, shifts, availability = [], unava
     return { s, e: s + shiftDuration(sh.start_time, sh.end_time) };
   };
   const inWeek = shifts.filter((sh) => dates.includes(sh.date));
+  const roleOf = Object.fromEntries(staff.map((s) => [s.id, s.role]));
+  const norm = (r) => String(r || '').trim().toLowerCase();
+  // The role a shift actually fills: the person's own role. A shift labelled with a different role does not count
+  // toward that role's coverage (it is flagged below); people with no role recorded fall back to the shift's label.
+  const filledRole = (sh) => norm(roleOf[sh.staff_id] || sh.role);
   const label = (d) => `${DAY_NAMES[dayOfWeek(d)]} ${d.slice(8)}/${d.slice(5, 7)}`;
 
   // 1. Coverage
@@ -36,7 +41,7 @@ export function checkRoster({ weekStart, staff, shifts, availability = [], unava
       for (let t = 0; t < len; t += 15) {
         const slot = idx * 1440 + rs + t;
         const count = inWeek.filter((sh) => {
-          if (req.role && String(sh.role || staff.find((x) => x.id === sh.staff_id)?.role || '').toLowerCase() !== String(req.role).toLowerCase()) return false;
+          if (req.role && filledRole(sh) !== norm(req.role)) return false;
           const a = abs(sh);
           return a.s <= slot && slot < a.e;
         }).length;
@@ -65,6 +70,15 @@ export function checkRoster({ weekStart, staff, shifts, availability = [], unava
     if (!fits) v.push({ type: 'availability', staff_id: sh.staff_id, shift_id: sh.id, date: sh.date, message: `${who}'s ${label(sh.date)} shift ${sh.start_time}–${sh.end_time} is outside their availability` });
   }
 
+  // 2b. Role: a shift labelled with a role the person doesn't hold
+  for (const sh of inWeek) {
+    const own = norm(roleOf[sh.staff_id]);
+    if (sh.role && own && norm(sh.role) !== own) {
+      const who = nameOf[sh.staff_id] || 'Someone';
+      v.push({ type: 'role', staff_id: sh.staff_id, shift_id: sh.id, date: sh.date, role: sh.role, message: `${who} is a ${roleOf[sh.staff_id]} but is rostered as ${sh.role} on ${label(sh.date)} — this shift does not count toward ${sh.role} coverage` });
+    }
+  }
+
   // 3. Per-person limits
   for (const person of staff) {
     const mine = inWeek.filter((sh) => sh.staff_id === person.id).sort((a, b) => abs(a).s - abs(b).s);
@@ -75,7 +89,13 @@ export function checkRoster({ weekStart, staff, shifts, availability = [], unava
     }
     if (constraints.max_hours_per_day != null) {
       for (const d of days) {
-        const mins = mine.filter((sh) => sh.date === d).reduce((t, sh) => t + shiftDuration(sh.start_time, sh.end_time), 0);
+        // Count clock time actually covered (overlapping shifts are flagged separately, not double-counted)
+        const spans = mine.filter((sh) => sh.date === d).map(abs).sort((a, b) => a.s - b.s);
+        let mins = 0, curS = null, curE = null;
+        for (const { s: a, e: b } of spans) {
+          if (curE == null || a > curE) { if (curE != null) mins += curE - curS; curS = a; curE = b; } else curE = Math.max(curE, b);
+        }
+        if (curE != null) mins += curE - curS;
         if (mins > Number(constraints.max_hours_per_day) * 60) v.push({ type: 'max_hours', staff_id: person.id, date: d, message: `${person.name} has ${mins / 60}h on ${label(d)} (max ${constraints.max_hours_per_day}h)` });
       }
     }

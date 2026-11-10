@@ -8,7 +8,7 @@ import { q, one, tx, migrate } from './db.js';
 import { setSession, clearSession, readSession, requireOwner, requireWorker } from './auth.js';
 import * as svc from './services.js';
 import { computePay } from './lib/payEngine.js';
-import { toMinutes, isDate, weekDates, todayIST, fmtHours } from './lib/time.js';
+import { toMinutes, isDate, weekDates, todayIST, fmtHours, assertShiftTimes } from './lib/time.js';
 import { validateRuleShape } from './schemas.js';
 import { seedIfEmpty, resetDemo } from './seed.js';
 import { handleMcp } from './mcp.js';
@@ -64,9 +64,13 @@ app.post('/api/auth/owner/login', h(async (req, res) => {
 app.post('/api/auth/worker/login', h(async (req, res) => {
   const phone = svc.cleanPhone(req.body?.phone);
   const pin = String(req.body?.pin || '');
-  const rows = phone ? await q('SELECT id, business_id, pin_hash FROM staff WHERE phone=$1 AND active AND pin_hash IS NOT NULL', [phone]) : [];
-  const s = rows.find((r) => bcrypt.compareSync(pin, r.pin_hash));
-  if (!s) throw err(401, 'Wrong phone number or PIN');
+  const rows = phone ? await q('SELECT s.id, s.business_id, s.pin_hash, b.name AS business_name FROM staff s JOIN businesses b ON b.id=s.business_id WHERE s.phone=$1 AND s.active AND s.pin_hash IS NOT NULL', [phone]) : [];
+  let matches = rows.filter((r) => bcrypt.compareSync(pin, r.pin_hash));
+  if (req.body?.business_id) matches = matches.filter((r) => r.business_id === req.body.business_id);
+  if (!matches.length) throw err(401, 'Wrong phone number or PIN');
+  // Same phone + PIN at more than one business (older accounts): let the worker pick instead of guessing.
+  if (matches.length > 1) return res.json({ choose_business: matches.map((r) => ({ business_id: r.business_id, name: r.business_name })) });
+  const s = matches[0];
   setSession(res, { t: 'worker', staff_id: s.id, business_id: s.business_id });
   res.json({ ok: true });
 }));
@@ -105,7 +109,7 @@ async function shiftBody(req) {
   const st = await one('SELECT id, role FROM staff WHERE id=$1 AND business_id=$2', [staff_id, B(req)]);
   if (!st) throw err(400, 'Pick a staff member');
   if (!isDate(date)) throw err(400, 'Invalid date');
-  toMinutes(start_time); toMinutes(end_time);
+  try { assertShiftTimes(start_time, end_time); } catch (e) { throw err(400, e.message); }
   return [st.id, date, start_time, end_time, role || st.role, notes || null];
 }
 
@@ -138,12 +142,17 @@ owner.post('/roster/fix', h(async (req, res) => {
     await own('shifts', f.shift_id);
     const st = await one('SELECT id FROM staff WHERE id=$1 AND business_id=$2', [f.staff_id, B(req)]);
     if (!st) throw err(400, 'Unknown staff');
-    toMinutes(f.start_time); toMinutes(f.end_time);
+    try { assertShiftTimes(f.start_time, f.end_time); } catch (e) { throw err(400, e.message); }
     await q("UPDATE shifts SET staff_id=$2, start_time=$3, end_time=$4, status='draft' WHERE id=$1", [f.shift_id, st.id, f.start_time, f.end_time]);
+  } else if (f.type === 'update_role') {
+    await own('shifts', f.shift_id);
+    const st = await one('SELECT role FROM staff WHERE id=$1 AND business_id=$2', [f.staff_id, B(req)]);
+    if (!st) throw err(400, 'Unknown staff');
+    await q("UPDATE shifts SET role=$2, status='draft' WHERE id=$1", [f.shift_id, st.role]);
   } else if (f.type === 'add_shift') {
     const st = await one('SELECT id, role FROM staff WHERE id=$1 AND business_id=$2', [f.staff_id, B(req)]);
     if (!st || !isDate(f.date)) throw err(400, 'Invalid fix');
-    toMinutes(f.start_time); toMinutes(f.end_time);
+    try { assertShiftTimes(f.start_time, f.end_time); } catch (e) { throw err(400, e.message); }
     await q("INSERT INTO shifts (business_id, staff_id, date, start_time, end_time, role, status) VALUES ($1,$2,$3,$4,$5,$6,'draft')", [B(req), st.id, f.date, f.start_time, f.end_time, st.role]);
   } else if (f.type === 'delete_shift') {
     await own('shifts', f.shift_id);
@@ -169,10 +178,12 @@ owner.post('/staff', h(async (req, res) => {
 }));
 owner.put('/staff/:id', h(async (req, res) => {
   const { name, phone, role, pin, availability, unavailable_dates, active } = req.body || {};
-  const p = svc.cleanPhone(phone);
-  if (!name || !p) throw err(400, 'Name and a 10-digit phone are required');
+  if (!name || !svc.cleanPhone(phone)) throw err(400, 'Name and a 10-digit phone are required');
+  const p = svc.validMobile(phone);
+  if (!p) throw err(400, 'Enter a valid Indian mobile number (starts with 6, 7, 8 or 9)');
   if (pin && !/^\d{4}$/.test(String(pin))) throw err(400, 'PIN must be 4 digits');
   await tx(async (t) => {
+    if (pin && await svc.pinClashes(t, p, String(pin), B(req))) throw err(400, 'This phone number already uses that PIN at another RostaPay business — choose a different PIN');
     const row = await t.one('UPDATE staff SET name=$3, phone=$4, role=$5, active=COALESCE($6, active) WHERE id=$1 AND business_id=$2 RETURNING id', [req.params.id, B(req), name, p, role || null, active ?? null]);
     if (!row) throw err(404, 'Staff not found');
     if (pin) await t.q('UPDATE staff SET pin_hash=$2 WHERE id=$1', [row.id, bcrypt.hashSync(String(pin), 8)]);
@@ -209,9 +220,10 @@ owner.delete('/rules/:id', h(async (req, res) => {
 }));
 owner.post('/rules/test', h(async (req, res) => {
   const { staff_id, role, date, start_time, end_time, break_minutes } = req.body || {};
-  if (!isDate(date)) throw err(400, 'Pick a date');
-  toMinutes(start_time); toMinutes(end_time);
+  if (!isDate(date)) throw err(400, 'Pick a real date');
+  try { assertShiftTimes(start_time, end_time, break_minutes); } catch (e) { throw err(400, e.message); }
   const st = staff_id ? await one('SELECT id, role FROM staff WHERE id=$1 AND business_id=$2', [staff_id, B(req)]) : null;
+  if (staff_id && !st) throw err(400, 'Unknown staff member');
   const rules = await svc.getRules(B(req));
   res.json(computePay({ rules, staff: st || { id: 'test', role: role || '' }, logs: [{ id: 'test', date, start: start_time, end: end_time, break_minutes: Number(break_minutes) || 0 }] }));
 }));
@@ -226,8 +238,9 @@ owner.get('/hours', h(async (req, res) => {
 }));
 owner.post('/hours/:id/approve', h(async (req, res) => {
   const { actual_start, actual_end, break_minutes } = req.body || {};
-  if (actual_start) toMinutes(actual_start);
-  if (actual_end) toMinutes(actual_end);
+  const cur = await one('SELECT actual_start, actual_end, break_minutes FROM time_logs WHERE id=$1 AND business_id=$2', [req.params.id, B(req)]);
+  if (!cur) throw err(404, 'Log not found');
+  try { assertShiftTimes(actual_start || cur.actual_start, actual_end || cur.actual_end, break_minutes ?? cur.break_minutes); } catch (e) { throw err(400, e.message); }
   const row = await one(`UPDATE time_logs SET status='approved', approved_at=now(), owner_note=NULL,
       actual_start=COALESCE($3, actual_start), actual_end=COALESCE($4, actual_end), break_minutes=COALESCE($5, break_minutes)
       WHERE id=$1 AND business_id=$2 RETURNING id`, [req.params.id, B(req), actual_start || null, actual_end || null, break_minutes ?? null]);
@@ -340,6 +353,7 @@ worker.get('/week', h(async (req, res) => {
   const w = await svc.getWeek(B(req), req.query.week, { publishedOnly: true });
   res.json({
     week_start: w.week_start, dates: w.dates,
+    week_published: w.shifts.length > 0, // false = the owner hasn't published this week yet (don't show "Day off")
     my_shifts: w.shifts.filter((s) => s.staff_id === S(req)).map((s) => ({ ...s, log: w.logs.find((l) => l.shift_id === s.id) || null })),
     team_shifts: w.shifts.filter((s) => s.staff_id !== S(req)).map(({ id, staff_name, date, start_time, end_time, role }) => ({ id, staff_name, date, start_time, end_time, role })),
     colleagues: w.staff.filter((s) => s.id !== S(req)).map(({ id, name, role }) => ({ id, name, role })),
@@ -353,7 +367,7 @@ worker.get('/logs', h(async (req, res) => {
 }));
 worker.post('/logs', h(async (req, res) => {
   const { shift_id, actual_start, actual_end, break_minutes } = req.body || {};
-  toMinutes(actual_start); toMinutes(actual_end);
+  try { assertShiftTimes(actual_start, actual_end, break_minutes); } catch (e) { throw err(400, e.message); }
   const sh = await one("SELECT id, date FROM shifts WHERE id=$1 AND staff_id=$2 AND status='published'", [shift_id, S(req)]);
   if (!sh) throw err(404, 'Shift not found');
   if (sh.date > todayIST()) throw err(400, "You can log hours once the shift has started");

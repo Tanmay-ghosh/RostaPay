@@ -12,8 +12,28 @@ export function fromMinutes(min) {
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
 }
 
+// A real calendar date: rejects impossible days such as 2026-02-30 (which Date.parse silently rolls over).
 export function isDate(s) {
-  return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s + 'T00:00:00Z'));
+  if (typeof s !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(s)) return false;
+  const d = new Date(s + 'T00:00:00Z');
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === s;
+}
+
+export function assertDate(s) {
+  if (!isDate(s)) throw new Error(`Invalid date "${s}" (use a real YYYY-MM-DD date)`);
+  return s;
+}
+
+// Validates a shift's start/end (and optional break). Start = end is rejected: it would silently become a 24h shift.
+// Use 00:00–24:00 if a full-day shift is really meant.
+export function assertShiftTimes(start, end, breakMinutes = 0) {
+  const s = toMinutes(start), e = toMinutes(end);
+  if (s === e) throw new Error(`Start and end time are both ${start} — a shift needs a length (use 00:00–24:00 for a full day)`);
+  const dur = e > s ? e - s : e + 1440 - s;
+  const br = Number(breakMinutes) || 0;
+  if (br < 0) throw new Error('Break minutes cannot be negative');
+  if (br >= dur) throw new Error(`Break of ${br} min is as long as or longer than the ${dur} min shift`);
+  return dur;
 }
 
 export function addDays(dateStr, n) {

@@ -7,7 +7,7 @@ import { one } from './db.js';
 import * as svc from './services.js';
 import { computePay } from './lib/payEngine.js';
 import { ruleSchema, time, date, weekday } from './schemas.js';
-import { DAY_NAMES, fmtINR, fmtHours, toMinutes } from './lib/time.js';
+import { DAY_NAMES, fmtINR, fmtHours, assertDate, assertShiftTimes } from './lib/time.js';
 
 const INSTRUCTIONS = `RostaPay runs staff rosters and pay for a small business (café, salon, clinic) in India.
 You (Claude) do the thinking: read the owner's pay policy, staff list and availability, and draft rosters.
@@ -116,8 +116,10 @@ Always fill source_text with the owner's wording. mode "replace" (default) repla
       role: z.string().optional().describe('Role to test with if no staff given'),
     },
   }, safe(async (a) => {
-    toMinutes(a.start_time); toMinutes(a.end_time);
+    assertDate(a.date);
+    assertShiftTimes(a.start_time, a.end_time, a.break_minutes);
     const st = a.staff ? await svc.findStaff(bid, a.staff) : null;
+    if (a.staff && !st) throw new Error(`Unknown staff "${a.staff}" — use a name or phone from get_business_overview, or leave staff out and pass role`);
     const rules = await svc.getRules(bid);
     const r = computePay({ rules, staff: st || { id: 'test', role: a.role || '' }, logs: [{ id: 't', date: a.date, start: a.start_time, end: a.end_time, break_minutes: a.break_minutes }] });
     return text({ worked: fmtHours(r.worked_minutes), breakdown: r.lines.map((l) => `${l.rule_name}: ${l.label} = ${fmtINR(l.amount)}`), total: fmtINR(r.total), warnings: r.warnings, manual_rules_not_included: r.manual_rules.map((m) => m.name) });
@@ -129,9 +131,13 @@ Always fill source_text with the owner's wording. mode "replace" (default) repla
     inputSchema: {
       week_start: date.describe('Any date in the week; normalised to Monday'),
       replace_existing: z.boolean().default(true),
-      shifts: z.array(z.object({ staff: z.string().describe('Staff name or phone'), date, start_time: time, end_time: time, role: z.string().optional(), notes: z.string().optional() })).min(1),
+      shifts: z.array(z.object({ staff: z.string().describe('Staff name or phone'), date, start_time: time, end_time: time, role: z.string().optional().describe("Defaults to the person's own role. A different role is flagged and does not count toward that role's coverage."), notes: z.string().optional() })).min(1),
     },
-  }, safe(async (a) => text(rosterSummary(await svc.saveRoster(bid, a.week_start, a.shifts, a.replace_existing), appUrl))));
+  }, safe(async (a) => {
+    assertDate(a.week_start);
+    for (const s of a.shifts) assertDate(s.date);
+    return text(rosterSummary(await svc.saveRoster(bid, a.week_start, a.shifts, a.replace_existing), appUrl));
+  }));
 
   server.registerTool('get_roster', {
     title: 'Get roster',
