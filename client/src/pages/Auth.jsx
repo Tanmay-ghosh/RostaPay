@@ -1,12 +1,14 @@
 import { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { post } from '../api.js';
 import { Logo, ErrorBox } from '../components.jsx';
 
 export function OwnerAuth() {
   const nav = useNavigate();
+  const [sp] = useSearchParams();
+  const demo = sp.get('demo') === '1';
   const [mode, setMode] = useState('login');
-  const [f, setF] = useState({ email: '', password: '', business_name: '', name: '' });
+  const [f, setF] = useState({ email: demo ? 'demo@rostapay.app' : '', password: demo ? 'RostaPay@2026' : '', business_name: '', name: '' });
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
@@ -52,8 +54,10 @@ export function OwnerAuth() {
 
 export function WorkerLogin() {
   const nav = useNavigate();
-  const [phone, setPhone] = useState('');
-  const [pin, setPin] = useState('');
+  const [sp] = useSearchParams();
+  const demo = sp.get('demo') === '1';
+  const [phone, setPhone] = useState(demo ? '9000000001' : '');
+  const [pin, setPin] = useState(demo ? '1234' : '');
   const [error, setError] = useState(null);
   const [busy, setBusy] = useState(false);
   const submit = async (e) => {
